@@ -1,1 +1,150 @@
+from fastapi import FastAPI, HTTPException, status
+from pydantic import BaseModel, Field
+from typing import Optional
+from enum import Enum
 
+app = FastAPI(
+    title="UtsavSync API",
+    description="Smart Crowd and Waste Management API for Festivals (Ganesh Utsav & Navratri Garba)",
+    version="1.0.0"
+)
+
+# --- Enums & Status Rules ---
+class CrowdStatus(str, Enum):
+    GREEN = "GREEN"       # < 60% capacity
+    ORANGE = "ORANGE"     # 60% - 85% capacity
+    RED = "RED"           # > 85% capacity
+
+class DecisionAction(str, Enum):
+    ALLOCATE = "Allocate"
+    DIVERT = "Divert"
+    REJECT = "Reject"
+
+class FestivalType(str, Enum):
+    GANESH_UTSAV = "ganesh_utsav"
+    NAVRATRI_GARBA = "navratri_garba"
+
+# --- Pydantic Models ---
+class AllocationInput(BaseModel):
+    festival_type: FestivalType
+    site_id: str
+    group_size: int = Field(..., gt=0, description="Number of people in the group")
+    time_slot: str = Field(..., description="Requested time slot e.g., '18:00-19:00'")
+    citizen_report_override: Optional[CrowdStatus] = None
+
+class AllocationResponse(BaseModel):
+    action: DecisionAction
+    reason: str
+    current_crowd_percentage: float
+    crowd_status: CrowdStatus
+    swm_task_triggered: bool
+    suggested_site: Optional[str] = None
+
+# --- Mock Supabase Database Repository ---
+fake_db_sites = {
+    "site_01": {
+        "festival_type": "ganesh_utsav",
+        "site_name": "Lalbaug Pandal",
+        "total_capacity": 1000,
+        "current_occupancy": 500,
+        "bin_level_percentage": 45.0,
+        "alternate_site_id": "site_02"
+    },
+    "site_02": {
+        "festival_type": "ganesh_utsav",
+        "site_name": "Alternate Relief Pandal",
+        "total_capacity": 800,
+        "current_occupancy": 300,
+        "bin_level_percentage": 82.0,  # High waste level triggering SWM task
+        "alternate_site_id": None
+    }
+}
+
+# --- API Endpoints ---
+
+@app.get("/", tags=["Root"])
+def read_root():
+    return {
+        "project": "UtsavSync",
+        "status": "Online",
+        "docs_url": "/docs",
+        "message": "Connected to UtsavSync Decision Engine."
+    }
+
+@app.post("/api/v1/allocate", response_model=AllocationResponse, tags=["Allocation Engine"])
+def process_allocation(payload: AllocationInput):
+    """
+    Processes incoming group requests, checks capacity thresholds, 
+    calculates crowd status, and returns an Allocate, Divert, or Reject decision.
+    """
+    site = fake_db_sites.get(payload.site_id)
+    if not site:
+        raise HTTPException(status_code=404, detail="Site ID not found in database.")
+
+    # 1. Processing: Calculate projected crowd level
+    projected_occupancy = site["current_occupancy"] + payload.group_size
+    crowd_percentage = (projected_occupancy / site["total_capacity"]) * 100
+
+    # 2. Determine Crowd Status based on rules (<60% Green, 60-85% Orange, >85% Red)
+    if crowd_percentage < 60:
+        crowd_status = CrowdStatus.GREEN
+    elif 60 <= crowd_percentage <= 85:
+        crowd_status = CrowdStatus.ORANGE
+    else:
+        crowd_status = CrowdStatus.RED
+
+    # Override if urgent citizen/volunteer reports indicate RED zone manually
+    if payload.citizen_report_override == CrowdStatus.RED:
+        crowd_status = CrowdStatus.RED
+        crowd_percentage = max(crowd_percentage, 86.0)
+
+    # 3. Waste level check (Triggers SWM task if bin level >= 80%)
+    swm_task_triggered = False
+    if site["bin_level_percentage"] >= 80.0:
+        swm_task_triggered = True
+
+    # 4. Decision Logic Output Generation
+    if crowd_status == CrowdStatus.GREEN:
+        action = DecisionAction.ALLOCATE
+        reason = f"Site capacity is optimal ({crowd_percentage:.1f}%). Group successfully allocated."
+        suggested_site = None
+    elif crowd_status == CrowdStatus.ORANGE:
+        action = DecisionAction.DIVERT
+        reason = f"Moderate peak-hour queue detected ({crowd_percentage:.1f}%). Diversion suggested to prevent congestion."
+        suggested_site = site.get("alternate_site_id")
+    else:
+        action = DecisionAction.REJECT
+        reason = f"Site is in RED zone / over-capacity ({crowd_percentage:.1f}%). Allocation rejected; automatic rerouting active."
+        suggested_site = site.get("alternate_site_id")
+
+    return {
+        "action": action,
+        "reason": reason,
+        "current_crowd_percentage": round(crowd_percentage, 2),
+        "crowd_status": crowd_status,
+        "swm_task_triggered": swm_task_triggered,
+        "suggested_site": suggested_site
+    }
+
+@app.get("/api/v1/sites/{site_id}", tags=["Site Monitoring"])
+def get_site_status(site_id: str):
+    """Retrieves real-time status, capacity percentage, and bin levels for a specific site."""
+    site = fake_db_sites.get(site_id)
+    if not site:
+        raise HTTPException(status_code=404, detail="Site not found.")
+    
+    occupancy_pct = (site["current_occupancy"] / site["total_capacity"]) * 100
+    
+    if occupancy_pct < 60:
+        status = CrowdStatus.GREEN
+    elif occupancy_pct <= 85:
+        status = CrowdStatus.ORANGE
+    else:
+        status = CrowdStatus.RED
+
+    return {
+        **site,
+        "occupancy_percentage": round(occupancy_pct, 2),
+        "crowd_status": status,
+        "swm_alert": site["bin_level_percentage"] >= 80.0
+    }
