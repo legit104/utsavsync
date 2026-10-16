@@ -6,6 +6,17 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 const hasAuth = Boolean(supabaseUrl && supabaseKey)
 
+const SESSION_KEY = 'utsavsync-session'
+const NOT_CONFIGURED = 'Accounts are not set up on this computer. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to the frontend .env, then restart npm run dev.'
+
+/* Supabase's error messages, in words a festival visitor understands. */
+const FRIENDLY_ERRORS = [
+  [/invalid login credentials/i, 'Wrong email or password. If you are new, create an account first.'],
+  [/email not confirmed/i, 'Please confirm your email first: open the link Supabase sent to your inbox, then sign in.'],
+  [/user already registered/i, 'An account with this email already exists. Sign in instead.'],
+  [/rate limit/i, 'Too many attempts or emails right now. Please wait a few minutes and try again.'],
+]
+
 async function authRequest(path, payload) {
   const response = await fetch(`${supabaseUrl}/auth/v1/${path}`, {
     method: 'POST',
@@ -13,8 +24,25 @@ async function authRequest(path, payload) {
     body: JSON.stringify(payload),
   })
   const data = await response.json()
-  if (!response.ok) throw new Error(data.msg || data.message || data.error_description || 'Unable to complete sign in.')
+  if (!response.ok) {
+    const raw = data.msg || data.message || data.error_description || 'Unable to complete sign in.'
+    throw new Error(FRIENDLY_ERRORS.find(([pattern]) => pattern.test(raw))?.[1] || raw)
+  }
   return data
+}
+
+/* Only a real Supabase session counts; old demo sessions and anything unreadable are dropped. */
+function loadStoredSession() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null')
+    if (hasAuth && stored?.access_token && stored?.refresh_token && !stored.demo) return stored
+  } catch { /* fall through */ }
+  localStorage.removeItem(SESSION_KEY)
+  return null
+}
+
+function withExpiry(data) {
+  return { ...data, expires_at: data.expires_at || Math.floor(Date.now() / 1000) + (data.expires_in || 3600) }
 }
 
 function App() {
@@ -25,37 +53,56 @@ function App() {
   const [mode, setMode] = useState('signin')
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
-  const [session, setSession] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('utsavsync-session') || 'null') } catch { return null }
-  })
+  const [session, setSession] = useState(loadStoredSession)
+
+  function startSession(data) {
+    const next = withExpiry(data)
+    setSession(next)
+    if (remember) localStorage.setItem(SESSION_KEY, JSON.stringify(next))
+    else localStorage.removeItem(SESSION_KEY)
+  }
 
   useEffect(() => {
-    if (!remember && session) localStorage.removeItem('utsavsync-session')
+    if (!remember && session) localStorage.removeItem(SESSION_KEY)
   }, [remember, session])
+
+  /* Supabase access tokens last about an hour: renew one a minute before it expires
+     (or straight away if it already has), otherwise sign out. */
+  useEffect(() => {
+    if (!session?.refresh_token) return undefined
+    const wait = Math.max(0, (session.expires_at - 60) * 1000 - Date.now())
+    const timer = setTimeout(async () => {
+      try {
+        const data = await authRequest('token?grant_type=refresh_token', { refresh_token: session.refresh_token })
+        const next = withExpiry(data)
+        setSession(next)
+        if (localStorage.getItem(SESSION_KEY)) localStorage.setItem(SESSION_KEY, JSON.stringify(next))
+      } catch {
+        setSession(null)
+        localStorage.removeItem(SESSION_KEY)
+        setMessage('Your session expired. Please sign in again.')
+      }
+    }, wait)
+    return () => clearTimeout(timer)
+  }, [session])
 
   async function handleSubmit(event) {
     event.preventDefault()
-    setBusy(true)
     setMessage('')
+    if (!hasAuth) { setMessage(NOT_CONFIGURED); return }
+    setBusy(true)
     try {
-      if (!hasAuth) {
-        const demo = { access_token: null, user: { email, user_metadata: { role } }, demo: true }
-        setSession(demo)
-        if (remember) localStorage.setItem('utsavsync-session', JSON.stringify(demo))
-        setMessage('Demo session started. Connect Supabase to enable real accounts.')
-      } else if (mode === 'signup') {
+      if (mode === 'signup') {
         const data = await authRequest('signup', { email, password, data: { role } })
         if (data.access_token) {
-          setSession(data)
-          if (remember) localStorage.setItem('utsavsync-session', JSON.stringify(data))
+          startSession(data)
         } else {
           setMode('signin')
-          setMessage('Account created. Check your email to confirm, then sign in.')
+          setPassword('')
+          setMessage(`Account created. We sent a confirmation link to ${email}. Open it, then sign in here.`)
         }
       } else {
-        const data = await authRequest('token?grant_type=password', { email, password })
-        setSession(data)
-        if (remember) localStorage.setItem('utsavsync-session', JSON.stringify(data))
+        startSession(await authRequest('token?grant_type=password', { email, password }))
       }
     } catch (error) {
       setMessage(error.message)
@@ -76,8 +123,13 @@ function App() {
   }
 
   function signOut() {
+    if (session?.access_token) {
+      fetch(`${supabaseUrl}/auth/v1/logout`, {
+        method: 'POST', headers: { apikey: supabaseKey, Authorization: `Bearer ${session.access_token}` },
+      }).catch(() => {})
+    }
     setSession(null)
-    localStorage.removeItem('utsavsync-session')
+    localStorage.removeItem(SESSION_KEY)
     setPassword('')
     setMessage('')
   }
@@ -97,16 +149,18 @@ function App() {
           <h1>{isSignup ? 'Join UtsavSync' : 'Welcome back'}</h1>
           <p>{isSignup ? 'Create your account to help keep celebrations safe and clean.' : 'Sign in to help keep Mumbai’s festivals safe and clean.'}</p>
         </div>
-        <div className="role-cards" role="group" aria-label="Choose your role">
-          <button type="button" className={`role-card visitor-card ${role === 'visitor' ? 'active' : ''}`} onClick={() => setRole('visitor')}>
-            <span className="role-emoji">🪔</span><strong>Visitor</strong><small>Join &amp; explore</small>
-          </button>
-          <button type="button" className={`role-card volunteer-card ${role === 'volunteer' ? 'active' : ''}`} onClick={() => setRole('volunteer')}>
-            <span className="role-emoji">🤝</span><strong>Volunteer</strong><small>Report &amp; support</small>
-          </button>
-        </div>
+        {isSignup && (
+          <div className="role-cards" role="group" aria-label="Choose your role">
+            <button type="button" className={`role-card visitor-card ${role === 'visitor' ? 'active' : ''}`} onClick={() => setRole('visitor')}>
+              <span className="role-emoji">🪔</span><strong>Visitor</strong><small>Join &amp; explore</small>
+            </button>
+            <button type="button" className={`role-card volunteer-card ${role === 'volunteer' ? 'active' : ''}`} onClick={() => setRole('volunteer')}>
+              <span className="role-emoji">🤝</span><strong>Volunteer</strong><small>Report &amp; support</small>
+            </button>
+          </div>
+        )}
         <p className="role-hint">{!hasAuth
-          ? 'Prototype demo: choose a role, then sign in to open that workspace.'
+          ? 'Accounts are not configured on this computer yet.'
           : isSignup
             ? 'Choose Volunteer when creating your account if you will help with site operations.'
             : 'Sign in opens the role already assigned to your account.'}</p>
@@ -123,7 +177,7 @@ function App() {
           {message && <p className="auth-message" role="status">{message}</p>}
         </form>
         <div className="auth-switch"><span>{isSignup ? 'Already have an account?' : 'New to UtsavSync?'}</span><button className="link-button" type="button" onClick={() => { setMode(isSignup ? 'signin' : 'signup'); setMessage('') }}>{isSignup ? 'Sign in' : 'Create account'}</button></div>
-        {!hasAuth && <p className="demo-note">Prototype mode · demo access enabled</p>}
+        {!hasAuth && <p className="demo-note">Sign-in unavailable · Supabase is not configured</p>}
       </section>
     </main>
   )

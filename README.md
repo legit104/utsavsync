@@ -13,7 +13,9 @@ The frontend uses `http://localhost:8000` by default. Set `VITE_API_URL` in `.en
 
 ## Supabase email/password accounts
 
-Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the frontend `.env`. Configure the same project in the backend and set `AUTH_MODE=supabase`; see the backend README for the required environment variables and role behavior. Leave the Supabase values blank to use prototype demo access.
+Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (the **publishable** key, never the secret one) in the frontend `.env`. Configure the same project in the backend and set `AUTH_MODE=supabase`; see the backend README for the required environment variables and role behavior.
+
+Everyone must create an account before signing in; there is no demo login. With email confirmation on in Supabase, new accounts must open the confirmation link sent to their inbox first. The role (Visitor or Volunteer) is chosen when the account is created and cannot be switched at sign-in. Without the Supabase values, sign-in is unavailable.
 
 ## Operations engine
 
