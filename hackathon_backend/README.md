@@ -27,7 +27,7 @@ uvicorn app.main:app --reload
 Open **http://localhost:8000/docs** for interactive API docs (every endpoint can be tried there).
 
 ```bash
-pytest                                  # 21 tests: rules, reroute, SWM, simulation, API, login, database
+pytest                                  # 31 tests: rules, reroute, SWM, simulation, API, login, database, frontend contract
 python -m app.simulation --events 80    # simulate a full day for both festivals -> output/
 ```
 

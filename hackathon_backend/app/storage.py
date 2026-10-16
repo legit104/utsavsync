@@ -17,11 +17,26 @@ from __future__ import annotations
 import logging
 import os
 import queue
+import ssl
 import threading
 
 import httpx
 
 log = logging.getLogger("festival.storage")
+
+
+def tls_verify() -> ssl.SSLContext | bool:
+    """Trust the same certificates as Windows/macOS (and the browser).
+
+    Antivirus web shields (e.g. Norton) and college/office networks re-sign HTTPS
+    traffic with their own certificate, which the OS trusts but Python's bundled
+    list does not, so plain httpx fails with CERTIFICATE_VERIFY_FAILED.
+    """
+    try:
+        import truststore
+        return truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    except ImportError:
+        return True
 
 # Upsert key per table when it is not just "id" (PostgREST on_conflict).
 CONFLICT_KEYS = {"sites": "festival_id,id", "site_status": "festival_id,site_id"}
@@ -39,7 +54,8 @@ class SupabaseStorage:
         # new sb_secret_ keys are not JWTs and must only be sent as apikey.
         if not key.startswith("sb_"):
             headers["Authorization"] = f"Bearer {key}"
-        self.client = httpx.Client(base_url=f"{url.rstrip('/')}/rest/v1", timeout=10, headers=headers)
+        self.client = httpx.Client(base_url=f"{url.rstrip('/')}/rest/v1", timeout=10, headers=headers,
+                                   verify=tls_verify())
         self.background = background
         self._queue: queue.Queue[tuple[str, list[dict]]] = queue.Queue()
         if background:

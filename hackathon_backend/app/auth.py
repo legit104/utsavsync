@@ -20,6 +20,8 @@ from typing import Callable
 import httpx
 from fastapi import Depends, Header, HTTPException
 
+from .storage import tls_verify
+
 ROLES = ("visitor", "volunteer")
 CACHE_SECONDS = 60
 _cache: dict[str, tuple[float, "User"]] = {}
@@ -51,7 +53,7 @@ def _lookup(token: str) -> User:
     if not url or not key:
         raise HTTPException(500, "AUTH_MODE=supabase needs SUPABASE_URL and SUPABASE_ANON_KEY in .env")
     try:
-        response = httpx.get(f"{url.rstrip('/')}/auth/v1/user", timeout=5,
+        response = httpx.get(f"{url.rstrip('/')}/auth/v1/user", timeout=5, verify=tls_verify(),
                              headers={"apikey": key, "Authorization": f"Bearer {token}"})
     except httpx.HTTPError as exc:
         raise HTTPException(503, "Could not reach Supabase Auth") from exc
@@ -66,15 +68,30 @@ def _lookup(token: str) -> User:
     return user
 
 
+def _bearer(authorization: str | None) -> str | None:
+    if authorization and authorization.lower().startswith("bearer "):
+        return authorization.split(" ", 1)[1].strip() or None
+    return None
+
+
 def current_user(authorization: str | None = Header(None),
                  x_user_id: str | None = Header(None, description="Dev only (AUTH_MODE=off): fake user id"),
                  x_role: str | None = Header(None, description="Dev only (AUTH_MODE=off): visitor or volunteer")) -> User:
+    token = _bearer(authorization)
     if not auth_enabled():
+        # Nothing is enforced, but a real Supabase login still identifies the user,
+        # so bookings and "my groups" work whether or not login is switched on.
+        if token and os.getenv("SUPABASE_URL") and os.getenv("SUPABASE_ANON_KEY"):
+            try:
+                user = _lookup(token)
+                return User(user.id, user.email, user.role, verified=False)
+            except HTTPException:
+                pass
         role = (x_role or "visitor").lower()
         return User(x_user_id, None, role if role in ROLES else "visitor", verified=False)
-    if not authorization or not authorization.lower().startswith("bearer "):
+    if not token:
         raise HTTPException(401, "Sign in required: send 'Authorization: Bearer <access token>'")
-    return _lookup(authorization.split(" ", 1)[1].strip())
+    return _lookup(token)
 
 
 def require_volunteer(user: User = Depends(current_user)) -> User:

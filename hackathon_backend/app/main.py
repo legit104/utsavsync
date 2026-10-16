@@ -12,7 +12,7 @@ import threading
 from contextlib import contextmanager
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import auth
@@ -134,11 +134,19 @@ def list_festivals():
 
 
 @app.post("/festivals", status_code=201, tags=["profiles"])
-def add_festival(profile: FestivalProfile, overwrite: bool = False):
-    """Add a festival live by uploading its profile. No code changes needed."""
-    if profile.id in profiles and not overwrite:
-        raise HTTPException(409, f"Festival '{profile.id}' already exists; pass ?overwrite=true to replace it.")
+def add_festival(profile: FestivalProfile, response: Response, overwrite: bool = False):
+    """Add a festival live by uploading its profile. No code changes needed.
+
+    Uploading the exact same profile again is fine (it is already live), so the
+    demo can be rehearsed and then repeated in front of judges.
+    """
     data = profile.model_dump()
+    if profile.id in profiles and not overwrite:
+        if profiles[profile.id] == data:
+            response.status_code = 200
+            return {"message": f"{profile.name} is already live with {len(profile.sites)} sites.", "id": profile.id}
+        raise HTTPException(409, f"A different festival with id '{profile.id}' already exists; "
+                                 "pass ?overwrite=true to replace it.")
     save_profile(data)
     with locks.setdefault(profile.id, threading.Lock()):
         start_engine(data)

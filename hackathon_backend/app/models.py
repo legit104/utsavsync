@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .profiles import HHMM
 
@@ -75,8 +75,20 @@ class WhatIf(BaseModel):
     site_id: str = Field(examples=["lalbaugcha_raja"])
     at_time: str | None = Field(None, pattern=HHMM, examples=["21:00"],
                                 description="Fast-forward the copy to this time first")
-    extra_people: int = Field(0, ge=0, description="For crowd_surge")
-    then_advance_minutes: int = Field(0, ge=0, le=1440)
+    extra_people: int | None = Field(0, ge=0, description="For crowd_surge")
+    then_advance_minutes: int | None = Field(0, ge=0, le=1440)
+
+    @field_validator("extra_people", "then_advance_minutes", "at_time", mode="before")
+    @classmethod
+    def blank_is_unset(cls, value):
+        # Form fields left empty arrive as null or "" (or NaN, which JSON sends as null).
+        return None if value in ("", None) else value
+
+    @model_validator(mode="after")
+    def fill_defaults(self):
+        self.extra_people = self.extra_people or 0
+        self.then_advance_minutes = self.then_advance_minutes or 0
+        return self
 
 
 class SimulateRequest(BaseModel):
