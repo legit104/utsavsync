@@ -1,16 +1,48 @@
-# React + Vite
+# UtsavSync — Festival Operations Engine
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Keeping Mumbai's festival crowds moving and its streets clean (PS 01, BMC Project Swachchha).
 
-Currently, two official plugins are available:
+UtsavSync allocates visitor groups to festival sites and time slots, monitors crowd status
+(GREEN / AMBER / RED), reroutes groups automatically when a site becomes unsafe, and raises
+SWM pickup tasks before bins overflow. New festivals are added through configuration
+profiles, not code.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+| Part | Where | Stack |
+|---|---|---|
+| Frontend | repo root (`src/`, `public/`, `index.html`) | React + Vite |
+| Backend | [`hackathon_backend/`](hackathon_backend/) — see its [README](hackathon_backend/README.md) and [API contract](hackathon_backend/API_CONTRACT.md) | Python + FastAPI |
+| Database & login | Supabase (PostgreSQL + Auth) | |
 
-## React Compiler
+## Run the backend
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+**Windows:** double-click `hackathon_backend/start.bat`, or run `.\start.bat` inside
+`hackathon_backend`. The first run sets everything up; after that it starts in a few seconds.
+Then open http://localhost:8000/docs.
 
-## Expanding the ESLint configuration
+**Manual / macOS / Linux:**
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+```bash
+cd hackathon_backend
+python -m venv .venv
+.venv\Scripts\activate          # macOS/Linux: source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+```
+
+## Run the frontend
+
+From the repo root, with Node.js installed:
+
+```bash
+npm install
+npm run dev
+```
+
+Then open the URL Vite prints (usually http://localhost:5173). The frontend talks to the
+backend at `http://localhost:8000`, so start the backend too.
+
+## Secrets
+
+Supabase keys go in `.env` files, which git ignores. Never commit them. The frontend only
+ever gets the **publishable (anon)** key; the **secret (service role)** key stays in
+`hackathon_backend/.env`.

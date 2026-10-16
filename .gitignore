@@ -1,3 +1,9 @@
+# Secrets: never commit keys (frontend or backend)
+.env
+.env.*
+!.env.example
+*.local
+
 # Logs
 logs
 *.log
@@ -7,16 +13,23 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Frontend (Node / Vite)
 node_modules
 dist
 dist-ssr
-*.local
+
+# Backend (Python)
+.venv/
+__pycache__/
+.pytest_cache/
+output/
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
 .idea
 .DS_Store
+Thumbs.db
 *.suo
 *.ntvs*
 *.njsproj
