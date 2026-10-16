@@ -1,0 +1,73 @@
+{
+  "id": "dahi_handi",
+  "name": "Dahi Handi",
+  "description": "Third profile to add live during judging: POST this file to /festivals and the engine runs it with no code changes.",
+  "day": { "start": "08:00", "end": "20:00", "slot_minutes": 60 },
+  "thresholds": { "green_max": 0.55, "amber_max": 0.80 },
+  "rules": {
+    "max_group_size": 60,
+    "visit_minutes": 60,
+    "allow_amber_allocation": false,
+    "reroute_pending_on_red": true,
+    "reroute_window_minutes": 120,
+    "max_reroute_distance_km": 5.0,
+    "max_slot_shift": 2,
+    "slot_shift_penalty_km": 1.5,
+    "volunteer_report_weight": 0.8,
+    "citizen_report_weight": 0.4
+  },
+  "waste": {
+    "per_person_per_hour_kg": { "plastic_bottles": 0.06, "food": 0.04, "paper": 0.02 },
+    "pickup_trigger_fill": 0.70,
+    "forecast_minutes": 60,
+    "route_cluster_km": 3.0
+  },
+  "simulation": { "peak_time": "15:00", "peak_occupancy": 0.75, "spread_hours": 2.5 },
+  "sites": [
+    {
+      "id": "jamboree_maidan_worli",
+      "name": "Jamboree Maidan, Worli",
+      "lat": 19.0089, "lng": 72.8167,
+      "capacity": 6000,
+      "facilities": ["first_aid", "ambulance", "police_booth", "drinking_water"],
+      "bins": { "count": 20, "capacity_kg": 60 },
+      "popularity": 1.2
+    },
+    {
+      "id": "shivaji_park_dadar",
+      "name": "Shivaji Park, Dadar",
+      "lat": 19.0269, "lng": 72.8381,
+      "capacity": 8000,
+      "facilities": ["first_aid", "ambulance", "toilets", "drinking_water"],
+      "bins": { "count": 28, "capacity_kg": 60 },
+      "popularity": 1.1
+    },
+    {
+      "id": "lalbaug_market",
+      "name": "Lalbaug Market Chowk",
+      "lat": 18.9945, "lng": 72.8330,
+      "capacity": 3000,
+      "facilities": ["first_aid", "drinking_water"],
+      "bins": { "count": 10, "capacity_kg": 60 },
+      "popularity": 1.0
+    },
+    {
+      "id": "parel_bhoiwada",
+      "name": "Bhoiwada, Parel",
+      "lat": 19.0040, "lng": 72.8430,
+      "capacity": 2500,
+      "facilities": ["first_aid"],
+      "bins": { "count": 8, "capacity_kg": 60 },
+      "popularity": 0.9
+    },
+    {
+      "id": "ghatkopar_shreyas",
+      "name": "Shreyas Junction, Ghatkopar",
+      "lat": 19.0860, "lng": 72.9081,
+      "capacity": 4000,
+      "facilities": ["first_aid", "ambulance", "toilets"],
+      "bins": { "count": 14, "capacity_kg": 60 },
+      "popularity": 1.0
+    }
+  ]
+}

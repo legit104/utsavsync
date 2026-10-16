@@ -1,0 +1,82 @@
+{
+  "id": "navratri_garba",
+  "name": "Navratri Garba",
+  "description": "Evening garba and dandiya grounds across the western and central suburbs.",
+  "day": { "start": "18:00", "end": "23:30", "slot_minutes": 30 },
+  "thresholds": { "green_max": 0.60, "amber_max": 0.85 },
+  "rules": {
+    "max_group_size": 40,
+    "visit_minutes": 90,
+    "allow_amber_allocation": true,
+    "reroute_pending_on_red": true,
+    "reroute_window_minutes": 90,
+    "max_reroute_distance_km": 6.0,
+    "max_slot_shift": 2,
+    "slot_shift_penalty_km": 2.0,
+    "volunteer_report_weight": 0.8,
+    "citizen_report_weight": 0.4
+  },
+  "waste": {
+    "per_person_per_hour_kg": { "food": 0.07, "plastic": 0.05, "paper_and_decor": 0.03 },
+    "pickup_trigger_fill": 0.75,
+    "forecast_minutes": 60,
+    "route_cluster_km": 4.0
+  },
+  "simulation": { "peak_time": "21:30", "peak_occupancy": 0.72, "spread_hours": 1.5 },
+  "sites": [
+    {
+      "id": "borivali_korakendra",
+      "name": "Korakendra Ground, Borivali",
+      "lat": 19.2307, "lng": 72.8567,
+      "capacity": 6000,
+      "facilities": ["first_aid", "police_booth", "drinking_water", "toilets", "parking"],
+      "bins": { "count": 24, "capacity_kg": 60 },
+      "popularity": 1.25
+    },
+    {
+      "id": "kandivali_thakur_village",
+      "name": "Thakur Village Ground, Kandivali",
+      "lat": 19.2094, "lng": 72.8740,
+      "capacity": 4000,
+      "facilities": ["first_aid", "drinking_water", "toilets"],
+      "bins": { "count": 16, "capacity_kg": 60 },
+      "popularity": 1.0
+    },
+    {
+      "id": "malad_garba_ground",
+      "name": "Malad West Garba Ground",
+      "lat": 19.1864, "lng": 72.8484,
+      "capacity": 3500,
+      "facilities": ["first_aid", "drinking_water"],
+      "bins": { "count": 14, "capacity_kg": 60 },
+      "popularity": 0.9
+    },
+    {
+      "id": "goregaon_nesco",
+      "name": "NESCO Ground, Goregaon",
+      "lat": 19.1548, "lng": 72.8530,
+      "capacity": 7000,
+      "facilities": ["first_aid", "police_booth", "drinking_water", "toilets", "parking", "wheelchair_access"],
+      "bins": { "count": 28, "capacity_kg": 60 },
+      "popularity": 1.15
+    },
+    {
+      "id": "ghatkopar_garba",
+      "name": "Ghatkopar Garba Ground",
+      "lat": 19.0790, "lng": 72.9080,
+      "capacity": 3000,
+      "facilities": ["first_aid", "drinking_water", "toilets"],
+      "bins": { "count": 12, "capacity_kg": 60 },
+      "popularity": 0.9
+    },
+    {
+      "id": "mulund_kalidas",
+      "name": "Kalidas Ground, Mulund",
+      "lat": 19.1726, "lng": 72.9500,
+      "capacity": 2500,
+      "facilities": ["first_aid", "drinking_water"],
+      "bins": { "count": 10, "capacity_kg": 60 },
+      "popularity": 0.8
+    }
+  ]
+}
