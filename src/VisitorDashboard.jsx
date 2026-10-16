@@ -1,7 +1,8 @@
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import './VisitorDashboard.css'
 import { api } from './api'
+import SiteMap from './SiteMap'
 import dahiHandiProfile from './dahi_handi.json'
 
 const fallbackLocations = [
@@ -43,6 +44,19 @@ function VisitorDashboard({ onBackToLogin, userEmail, userRole = 'visitor', sess
   const [language, setLanguage] = useState('en')
   const [reportLocation, setReportLocation] = useState(fallbackLocations[0].name)
   const [reportDetails, setReportDetails] = useState('')
+  const [selectedSiteId, setSelectedSiteId] = useState(null)
+  const mapRef = useRef(null)
+
+  function showOnMap(siteId) {
+    setSelectedSiteId(siteId)
+    mapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+
+  function siteActions(site) {
+    return userRole === 'volunteer'
+      ? <button className="small-button" onClick={() => toggleSite(site)}>{site.closed ? 'Reopen site' : 'Close site'}</button>
+      : <button className="small-button" onClick={() => { setPreferred(site.name); setPage('Request Allocation'); setResult(null) }}>Request →</button>
+  }
 
   const festivalId = festivalProfiles.find(profile => profile.name === festival)?.id
     || (festival === 'Navratri Garba' ? 'navratri_garba' : 'ganesh_utsav')
@@ -218,8 +232,8 @@ function VisitorDashboard({ onBackToLogin, userEmail, userRole = 'visitor', sess
   }
 
   const navigation = userRole === 'volunteer'
-    ? ['Operations', 'Locations', 'Map', 'Reports', 'Waste Routes', 'What If', 'Simulation', 'Decision Log', 'Festival Profiles']
-    : ['Dashboard', 'Locations', 'Map', 'Request Allocation', 'My Groups', 'Reports']
+    ? ['Operations', 'Locations', 'Reports', 'Waste Routes', 'What If', 'Simulation', 'Decision Log', 'Festival Profiles']
+    : ['Dashboard', 'Locations', 'Request Allocation', 'My Groups', 'Reports']
 
   async function requestAllocation(e) {
     e.preventDefault()
@@ -325,7 +339,7 @@ function VisitorDashboard({ onBackToLogin, userEmail, userRole = 'visitor', sess
               Operations: 'Volunteer operations center',
               'Request Allocation': 'Request a festival visit',
               'My Groups': 'Your group visits',
-              Locations: 'Explore festival locations',
+              Locations: 'Festival locations & live map',
               Reports: userRole === 'volunteer' ? 'Submit a field report' : 'Report an issue',
               'Waste Routes': 'Coordinated waste pickup routes',
               'What If': 'Test an operations scenario',
@@ -493,59 +507,32 @@ function VisitorDashboard({ onBackToLogin, userEmail, userRole = 'visitor', sess
         {page === 'Locations' && (
           <section className="panel">
             <div className="section-heading">
-              <div><p className="eyebrow">LOCATION DIRECTORY</p><h2>Compare sites before travelling</h2></div>
-              <span className="demo-label">{connected ? 'LIVE ENGINE DATA' : 'SAMPLE DATA'}</span>
+              <div><p className="eyebrow">LIVE MAP & DIRECTORY · {festival}</p><h2>Compare sites before travelling</h2></div>
+              <span className="demo-label">{connected ? `LIVE ENGINE · ${simTime}` : 'SAMPLE DATA'}</span>
+            </div>
+            <div ref={mapRef}>
+              <SiteMap sites={locations} selectedId={selectedSiteId} onSelect={setSelectedSiteId} renderActions={siteActions} />
             </div>
             <div className="location-list">
               {locations.map(item => (
-                <article className="location-row" key={item.name}>
+                <article className={`location-row ${item.id === selectedSiteId ? 'selected' : ''}`} key={item.id || item.name}>
                   <div className={`location-thumbnail ${item.status.toLowerCase()}`}>✦</div>
                   <div className="location-details">
                     <strong>{item.name}</strong>
                     <small>⌖ {item.area} · Capacity {item.capacity} · Next slot {item.forecast ?? item.crowd}%</small>
-                    <div className="capacity-track"><span className={item.status.toLowerCase()} style={{ width: `${item.crowd}%` }} /></div>
+                    <div className="capacity-track"><span className={item.status.toLowerCase()} style={{ width: `${Math.min(item.crowd, 100)}%` }} /></div>
                     <small className="waste-readout">Bins {item.waste ?? 0}% · Forecast {item.wasteForecast ?? 0}% · Crowd trend {item.trend ?? 0}/hr</small>
+                    <button className="map-link" type="button" onClick={() => showOnMap(item.id)}>⌖ Show on map</button>
                   </div>
                   <div className="location-status">
                     <span className={`status-pill ${item.status.toLowerCase()}`}>{item.status}</span>
                     <small>{item.crowd}% crowd level</small>
                   </div>
-                  {userRole === 'volunteer' ? (
-                    <button className="small-button" onClick={() => toggleSite(item)}>{item.closed ? 'Reopen site' : 'Close site'}</button>
-                  ) : (
-                    <button className="small-button" onClick={() => { setPreferred(item.name); setPage('Request Allocation'); setResult(null) }}>Request →</button>
-                  )}
+                  {siteActions(item)}
                 </article>
               ))}
             </div>
-            <p className="form-note">{connected ? 'Current status and occupancy are supplied by the Festival Operations Engine.' : 'Crowd values are sample data. Start the backend to load live engine state.'}</p>
-          </section>
-        )}
-
-        {page === 'Map' && (
-          <section className="panel">
-            <div className="section-heading"><div><p className="eyebrow">SITE MAP · {festival}</p><h2>Festival locations &amp; crowd status</h2></div>
-              <span className="demo-label">{connected ? `ENGINE · ${simTime}` : 'SAMPLE COORDINATES'}</span></div>
-            <div className="map-layout">
-              <div className="map-canvas" role="img" aria-label="Schematic map showing festival site positions and crowd levels">
-                <div className="map-river"/><div className="map-road road-one"/><div className="map-road road-two"/><div className="map-road road-three"/>
-                <span className="map-district district-one">MUMBAI</span><span className="map-district district-two">FESTIVAL ZONE</span>
-                {(() => {
-                  const latitudes = locations.map(site => site.lat || 19)
-                  const longitudes = locations.map(site => site.lng || 72.85)
-                  const minLat = Math.min(...latitudes), maxLat = Math.max(...latitudes)
-                  const minLng = Math.min(...longitudes), maxLng = Math.max(...longitudes)
-                  return locations.map(site => {
-                    const x = maxLng === minLng ? 50 : 12 + ((site.lng - minLng) / (maxLng - minLng)) * 76
-                    const y = maxLat === minLat ? 50 : 12 + ((maxLat - site.lat) / (maxLat - minLat)) * 76
-                    return <button key={site.id} className={`map-pin ${site.status.toLowerCase()}`} style={{ left: `${x}%`, top: `${y}%` }} title={`${site.name} · ${site.crowd}% · ${site.status}`} onClick={() => { setPreferred(site.name); setPage('Locations') }}><i/ ><span>{site.name}</span></button>
-                  })
-                })()}
-                <div className="map-legend"><span><i className="green"/>Green</span><span><i className="orange"/>Amber</span><span><i className="red"/>Red</span></div>
-              </div>
-              <div className="map-site-list">{locations.map(site => <article key={site.id} className="map-site-row"><span className={`status-dot ${site.status.toLowerCase()}`}/><div><strong>{site.name}</strong><small>{site.crowd}% · {site.status}</small></div></article>)}</div>
-            </div>
-            <p className="form-note">Map pins use the profile coordinates. This schematic map is for the prototype; use the location list for exact site details.</p>
+            <p className="form-note">{connected ? 'Map © OpenStreetMap contributors. Status, occupancy and bin levels are supplied live by the Festival Operations Engine.' : 'Crowd values are sample data. Start the backend to load live engine state.'}</p>
           </section>
         )}
 

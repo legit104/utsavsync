@@ -1,0 +1,110 @@
+.site-map {
+  position: relative;
+  margin-bottom: 18px;
+}
+
+.site-map-canvas {
+  width: 100%;
+  height: 440px;
+  border: 1px solid #d9e2d4;
+  border-radius: 18px;
+  overflow: hidden;
+  z-index: 0; /* keep Leaflet's panes under the app's sticky header and menus */
+}
+
+.site-map-legend {
+  position: absolute;
+  z-index: 500;
+  left: 12px;
+  bottom: 12px;
+  display: flex;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid #e9e0cc;
+  border-radius: 10px;
+  background: #fffdf0ee;
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.site-map-legend span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.site-map-legend i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.site-popup {
+  display: flex;
+  min-width: 190px;
+  flex-direction: column;
+  gap: 6px;
+  font-family: inherit;
+}
+
+.site-popup strong {
+  font-size: 13px;
+}
+
+.site-popup .status-pill {
+  align-self: flex-start;
+}
+
+.site-popup dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 10px;
+  margin: 2px 0 4px;
+  font-size: 11px;
+}
+
+.site-popup dt {
+  color: #73777e;
+}
+
+.site-popup dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.status-pill.closed {
+  background: #eceef2;
+  color: #5b6372;
+}
+
+.location-thumbnail.closed {
+  background: #eceef2;
+  color: #5b6372;
+}
+
+.location-row.selected {
+  border-color: #08744c;
+  box-shadow: 0 0 0 2px #08744c22;
+}
+
+.map-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: #08744c;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+@media (max-width: 700px) {
+  .site-map-canvas {
+    height: 340px;
+  }
+
+  .site-map-legend {
+    flex-wrap: wrap;
+    right: 12px;
+  }
+}
