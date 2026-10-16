@@ -117,6 +117,9 @@ other are grouped into one collection route.
 
 ## API overview
 
+Frontend developers: see **[API_CONTRACT.md](API_CONTRACT.md)** for request/response JSON for
+every endpoint, login, and naming.
+
 All festival endpoints are under `/festivals/{festival_id}` (`ganesh_utsav`, `navratri_garba`).
 
 | Method | Path | Purpose |
