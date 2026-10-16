@@ -42,6 +42,10 @@ def to_hhmm(minutes: int) -> str:
     return f"{minutes // 60:02d}:{minutes % 60:02d}"
 
 
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
 def pct(ratio: float) -> str:
     return f"{ratio:.0%}"
 
@@ -158,12 +162,61 @@ class FestivalEngine:
         # Every request is judged on current crowd + groups already allocated + the new group.
         return (site.crowd + self.pending_load(site.id, slot_start) + extra) / site.capacity
 
-    def _persist(self, table: str, row_id: str, payload: dict, **columns) -> None:
-        if self.storage:
-            self.storage.save(table, {
-                "id": f"{self.run_id}-{row_id}", "run_id": self.run_id, "festival_id": self.id,
-                **columns, "payload": payload,
+    # ------------------------------------------------------ database rows
+    # One builder per table in supabase_schema.sql. Ids are prefixed with the
+    # run id so restarts and simulations never overwrite each other.
+
+    def _db_id(self, local_id: str | None) -> str | None:
+        return f"{self.run_id}-{local_id}" if local_id else None
+
+    def _row(self, local_id: str, **columns) -> dict:
+        return {"id": self._db_id(local_id), "run_id": self.run_id, "festival_id": self.id, **columns}
+
+    def _log_row(self, entry: dict) -> dict:
+        return self._row(entry["id"], type=entry["type"], sim_time=entry["sim_time"], payload=entry)
+
+    def _notification_row(self, entry: dict) -> dict:
+        group = entry.get("group") or {}
+        site_id = (entry.get("to_site_id") or (entry.get("assigned") or {}).get("site_id")
+                   or entry.get("site_id") or group.get("site_id"))
+        messages = entry["notifications"]
+        user_id = group.get("requested_by") or entry.get("requested_by")
+        return self._row(entry["id"], type=entry["type"], user_id=user_id,
+                         group_id=self._db_id(group.get("id")), site_id=site_id,
+                         message_en=messages["en"], message_hi=messages.get("hi"), message_mr=messages.get("mr"))
+
+    def _group_row(self, group: Group) -> dict:
+        return self._row(group.id, requested_by=group.requested_by, name=group.name, size=group.size,
+                         site_id=group.site_id, slot_time=to_hhmm(group.slot_start), status=group.status,
+                         reroutes=group.reroutes, payload=group.to_dict(), updated_at=_now())
+
+    def _task_row(self, task: dict) -> dict:
+        return self._row(task["id"], site_id=task["site_id"], status=task["status"],
+                         priority=task["priority"], payload=task, updated_at=_now())
+
+    def _status_rows(self) -> list[dict]:
+        rows = []
+        for site in self.sites.values():
+            view = self.site_view(site)
+            rows.append({
+                "festival_id": self.id, "site_id": site.id, "run_id": self.run_id, "sim_time": to_hhmm(self.clock),
+                "status": site.status, "crowd": site.crowd, "occupancy": view["occupancy"],
+                "pending_next_slot": view["pending_next_slot"], "waste_kg": view["waste"]["current_kg"],
+                "bin_fill": view["waste"]["fill"], "forecast_fill": view["waste"]["forecast_fill"],
+                "updated_at": _now(),
             })
+        return rows
+
+    def _save(self, table: str, rows) -> None:
+        if self.storage:
+            self.storage.save(table, rows)
+
+    def _save_group(self, group: Group) -> None:
+        self._save("groups", self._group_row(group))
+
+    def save_site_status(self) -> None:
+        """Write every site's live crowd and bin levels (called after each API change)."""
+        self._save("site_status", self._status_rows())
 
     def _log(self, type_: str, **fields) -> dict:
         entry = {
@@ -171,24 +224,22 @@ class FestivalEngine:
             "festival_id": self.id,
             "type": type_,
             "sim_time": to_hhmm(self.clock),
-            "logged_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "logged_at": _now(),
             **fields,
         }
         self.log.append(entry)
-        self._persist("decision_log", entry["id"], entry, type=type_, sim_time=entry["sim_time"])
+        self._save("decision_log", self._log_row(entry))
+        if entry.get("notifications"):
+            self._save("notifications", self._notification_row(entry))
         return entry
 
     def persist_all(self) -> None:
-        """Push the whole log and task list to storage (used after an offline simulation)."""
-        if not self.storage:
-            return
-        self.storage.save("decision_log", [
-            {"id": f"{self.run_id}-{e['id']}", "run_id": self.run_id, "festival_id": self.id,
-             "type": e["type"], "sim_time": e["sim_time"], "payload": e}
-            for e in self.log
-        ])
-        for task in self.swm_tasks.values():
-            self._save_task(task)
+        """Push everything to storage at once (used after an offline simulation)."""
+        self._save("decision_log", [self._log_row(e) for e in self.log])
+        self._save("notifications", [self._notification_row(e) for e in self.log if e.get("notifications")])
+        self._save("groups", [self._group_row(g) for g in self.groups.values()])
+        self._save("swm_tasks", [self._task_row(t) for t in self.swm_tasks.values()])
+        self.save_site_status()
 
     # --------------------------------------------------------------- allocation
 
@@ -312,10 +363,11 @@ class FestivalEngine:
             actions = [{"audience": "CITIZEN", "action": "RETRY_LATER"}]
             messages = notify("REJECTED", group=name)
 
-        entry = self._log("ALLOCATION", decision=decision, request_id=request_id,
+        entry = self._log("ALLOCATION", decision=decision, request_id=request_id, requested_by=requested_by,
                           group=group.to_dict() if group else None, requested=requested, assigned=assigned,
                           reason=reason, actions=actions, notifications=messages)
         if group:
+            self._save_group(group)
             if group.slot_start <= self.clock:
                 self._arrive(group)
             self._refresh([group.site_id], trigger=f"allocation {request_id}")
@@ -326,11 +378,13 @@ class FestivalEngine:
     def _arrive(self, group: Group) -> None:
         group.status, group.arrived_at = ARRIVED, self.clock
         self.sites[group.site_id].crowd += group.size
+        self._save_group(group)
 
     def _leave(self, group: Group) -> None:
         group.status = LEFT
         site = self.sites[group.site_id]
         site.crowd = max(0, site.crowd - group.size)
+        self._save_group(group)
 
     def _refresh(self, site_ids=None, trigger: str = "update") -> None:
         """Recompute status for sites, then react: reroute on RED, warn early, check bins."""
@@ -399,6 +453,7 @@ class FestivalEngine:
                           actions=[{"audience": "CITIZEN", "action": "RETRY_LATER"},
                                    {"audience": "BMC_OFFICER", "action": "REVIEW_CANCELLED_GROUP", "group_id": group.id}],
                           notifications=notify("REJECTED", group=group.name))
+            self._save_group(group)
 
     def crowd_trend(self, site: Site) -> float:
         """People per minute over the last TREND_WINDOW_MINUTES (positive = filling up).
@@ -452,8 +507,7 @@ class FestivalEngine:
         return next((t for t in self.swm_tasks.values() if t["site_id"] == site_id and t["status"] == "OPEN"), None)
 
     def _save_task(self, task: dict) -> None:
-        self._persist("swm_tasks", task["id"], task, site_id=task["site_id"], status=task["status"],
-                      priority=task["priority"])
+        self._save("swm_tasks", self._task_row(task))
 
     def _check_waste(self, site: Site) -> None:
         trigger = self.waste["pickup_trigger_fill"]

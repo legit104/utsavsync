@@ -5,9 +5,9 @@ before Supabase is set up. Send `X-User-Id` to fake a logged-in user.
 
 AUTH_MODE=supabase: protected calls need `Authorization: Bearer <access token>`
 from supabase.auth.signInWithPassword(). The backend asks Supabase who the
-token belongs to and reads the role from app_metadata.role (only settable with
-the service key, so trusted), falling back to user_metadata.role (chosen at
-sign-up). Anything else is treated as a visitor.
+token belongs to and reads the role from, in order: app_metadata.role (set by
+an admin), the `profiles` table (created on sign-up, not editable by users),
+then user_metadata.role. Anything else is treated as a visitor.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 import time
 from dataclasses import dataclass
+from typing import Callable
 
 import httpx
 from fastapi import Depends, Header, HTTPException
@@ -22,6 +23,8 @@ from fastapi import Depends, Header, HTTPException
 ROLES = ("visitor", "volunteer")
 CACHE_SECONDS = 60
 _cache: dict[str, tuple[float, "User"]] = {}
+# Set by main.py when Supabase storage is configured: user id -> role from the profiles table.
+role_lookup: Callable[[str], str | None] | None = None
 
 
 @dataclass
@@ -56,6 +59,7 @@ def _lookup(token: str) -> User:
         raise HTTPException(401, "Login expired or invalid; please sign in again")
     data = response.json()
     role = ((data.get("app_metadata") or {}).get("role")
+            or (role_lookup(data["id"]) if role_lookup and data.get("id") else None)
             or (data.get("user_metadata") or {}).get("role") or "visitor").lower()
     user = User(data.get("id"), data.get("email"), role if role in ROLES else "visitor", verified=True)
     _cache[token] = (time.time() + CACHE_SECONDS, user)

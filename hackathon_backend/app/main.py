@@ -6,6 +6,7 @@ Docs: http://localhost:8000/docs
 
 from __future__ import annotations
 
+import logging
 import os
 import threading
 from contextlib import contextmanager
@@ -14,6 +15,7 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
+from . import auth
 from .auth import User, auth_enabled, current_user, require_volunteer
 from .engine import FestivalEngine, NotFoundError, to_hhmm
 from .models import (AdvanceClock, CompleteTask, FieldReport, GroupRequest, Report, SensorUpdate, SimulateRequest,
@@ -23,6 +25,7 @@ from .simulation import run_reroute_demo, simulate_day
 from .storage import storage_from_env
 
 load_dotenv()
+log = logging.getLogger("festival.api")
 
 app = FastAPI(
     title="Festival Operations Engine",
@@ -44,29 +47,57 @@ engines: dict[str, FestivalEngine] = {}
 locks: dict[str, threading.Lock] = {}
 
 
+if storage:
+    auth.role_lookup = storage.user_role
+
+
+def all_profiles() -> dict[str, dict]:
+    """Profiles from profiles/*.json, plus festivals that only exist in the database."""
+    found = load_profiles()
+    for raw in storage.load_profiles() if storage else []:
+        try:
+            profile = FestivalProfile.model_validate(raw).model_dump()
+        except ValueError as exc:
+            log.warning("Skipping invalid festival profile in database: %s", exc)
+            continue
+        found.setdefault(profile["id"], profile)
+    return found
+
+
 def start_engine(profile: dict) -> FestivalEngine:
     profiles[profile["id"]] = profile
     locks.setdefault(profile["id"], threading.Lock())
-    engines[profile["id"]] = FestivalEngine(profile, storage)
-    return engines[profile["id"]]
+    engine = engines[profile["id"]] = FestivalEngine(profile, storage)
+    if storage:
+        storage.sync_profile(profile)
+        engine.save_site_status()
+    return engine
 
 
-for _profile in load_profiles().values():
+for _profile in all_profiles().values():
     start_engine(_profile)
 
 
 @contextmanager
 def festival(festival_id: str):
-    """Fetch a festival's engine, hold its lock, and turn engine errors into HTTP errors."""
+    """Fetch a festival's engine, hold its lock, and turn engine errors into HTTP errors.
+
+    After a call that changed anything, the live site status is written to the database.
+    """
     if festival_id not in engines:
         raise HTTPException(404, f"Unknown festival '{festival_id}'. See GET /festivals.")
     with locks[festival_id]:
+        engine = engines[festival_id]
+        before = (len(engine.log), engine.clock)
         try:
-            yield engines[festival_id]
+            yield engine
         except NotFoundError as exc:
             raise HTTPException(404, exc.args[0]) from exc
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
+        current = engines[festival_id]
+        if current is engine and (len(engine.log), engine.clock) != before:
+            engine.save_site_status()
 
 
 def new_events(engine: FestivalEngine, since: int, exclude: dict | None = None) -> list[dict]:
@@ -116,8 +147,8 @@ def add_festival(profile: FestivalProfile, overwrite: bool = False):
 
 @app.post("/festivals/reload", tags=["profiles"])
 def reload_festivals():
-    """Re-read every JSON file in profiles/ and restart those festivals from scratch."""
-    loaded = load_profiles()
+    """Re-read profiles (JSON files + database) and restart those festivals from scratch."""
+    loaded = all_profiles()
     for profile in loaded.values():
         with locks.setdefault(profile["id"], threading.Lock()):
             start_engine(profile)
@@ -134,8 +165,9 @@ def get_profile(festival_id: str):
 def reset_festival(festival_id: str):
     """Start the festival day over (clock back to opening time, no groups or tasks)."""
     with festival(festival_id) as engine:
-        engines[festival_id] = FestivalEngine(engine.profile, storage)
-        return engines[festival_id].snapshot()
+        fresh = engines[festival_id] = FestivalEngine(engine.profile, storage)
+        fresh.save_site_status()
+        return fresh.snapshot()
 
 
 # ------------------------------------------------------------- monitoring
