@@ -1,0 +1,92 @@
+{
+  "id": "ganesh_utsav",
+  "name": "Ganesh Utsav",
+  "description": "Pandal darshan across central and south Mumbai, with Girgaon Chowpatty as the visarjan point.",
+  "day": { "start": "06:00", "end": "23:00", "slot_minutes": 60 },
+  "thresholds": { "green_max": 0.60, "amber_max": 0.85 },
+  "rules": {
+    "max_group_size": 50,
+    "visit_minutes": 45,
+    "allow_amber_allocation": true,
+    "reroute_pending_on_red": true,
+    "reroute_window_minutes": 120,
+    "max_reroute_distance_km": 5.0,
+    "max_slot_shift": 2,
+    "slot_shift_penalty_km": 1.5,
+    "volunteer_report_weight": 0.8,
+    "citizen_report_weight": 0.4
+  },
+  "waste": {
+    "per_person_per_hour_kg": { "flowers_and_garlands": 0.05, "food_and_prasad": 0.05, "plastic": 0.03 },
+    "pickup_trigger_fill": 0.75,
+    "forecast_minutes": 60,
+    "route_cluster_km": 2.0
+  },
+  "simulation": { "peak_time": "20:00", "peak_occupancy": 0.7, "spread_hours": 3.5 },
+  "sites": [
+    {
+      "id": "lalbaugcha_raja",
+      "name": "Lalbaugcha Raja",
+      "lat": 18.9940, "lng": 72.8335,
+      "capacity": 5000,
+      "facilities": ["first_aid", "police_booth", "drinking_water", "toilets", "queue_barricades"],
+      "bins": { "count": 24, "capacity_kg": 60 },
+      "popularity": 1.3
+    },
+    {
+      "id": "ganesh_galli",
+      "name": "Ganesh Galli (Mumbaicha Raja)",
+      "lat": 18.9965, "lng": 72.8318,
+      "capacity": 2500,
+      "facilities": ["first_aid", "drinking_water", "toilets"],
+      "bins": { "count": 12, "capacity_kg": 60 },
+      "popularity": 1.0
+    },
+    {
+      "id": "chinchpokli_chintamani",
+      "name": "Chinchpoklicha Chintamani",
+      "lat": 18.9862, "lng": 72.8298,
+      "capacity": 3000,
+      "facilities": ["first_aid", "police_booth", "drinking_water"],
+      "bins": { "count": 14, "capacity_kg": 60 },
+      "popularity": 1.1
+    },
+    {
+      "id": "gsb_kings_circle",
+      "name": "GSB Seva Mandal, King's Circle",
+      "lat": 19.0270, "lng": 72.8565,
+      "capacity": 3000,
+      "facilities": ["first_aid", "drinking_water", "toilets", "wheelchair_access"],
+      "bins": { "count": 14, "capacity_kg": 60 },
+      "popularity": 1.1
+    },
+    {
+      "id": "khetwadi_ganraj",
+      "name": "Khetwadi Ganraj",
+      "lat": 18.9580, "lng": 72.8195,
+      "capacity": 2000,
+      "facilities": ["first_aid", "drinking_water"],
+      "bins": { "count": 10, "capacity_kg": 60 },
+      "popularity": 0.8
+    },
+    {
+      "id": "girgaon_chowpatty",
+      "name": "Girgaon Chowpatty (Visarjan Point)",
+      "lat": 18.9548, "lng": 72.8143,
+      "capacity": 8000,
+      "open": "10:00",
+      "facilities": ["lifeguards", "first_aid", "police_booth", "artificial_pond", "toilets"],
+      "bins": { "count": 30, "capacity_kg": 80 },
+      "popularity": 0.6
+    },
+    {
+      "id": "andhericha_raja",
+      "name": "Andhericha Raja",
+      "lat": 19.1197, "lng": 72.8468,
+      "capacity": 3000,
+      "facilities": ["first_aid", "drinking_water", "toilets"],
+      "bins": { "count": 14, "capacity_kg": 60 },
+      "popularity": 0.9
+    }
+  ]
+}
