@@ -18,16 +18,16 @@ log = logging.getLogger("festival.storage")
 
 class SupabaseStorage:
     def __init__(self, url: str, key: str):
-        self.client = httpx.Client(
-            base_url=f"{url.rstrip('/')}/rest/v1",
-            timeout=5,
-            headers={
-                "apikey": key,
-                "Authorization": f"Bearer {key}",
-                "Content-Type": "application/json",
-                "Prefer": "resolution=merge-duplicates,return=minimal",
-            },
-        )
+        headers = {
+            "apikey": key,
+            "Content-Type": "application/json",
+            "Prefer": "resolution=merge-duplicates,return=minimal",
+        }
+        # Legacy service_role keys are JWTs and also go in Authorization;
+        # new sb_secret_ keys are not JWTs and must only be sent as apikey.
+        if not key.startswith("sb_"):
+            headers["Authorization"] = f"Bearer {key}"
+        self.client = httpx.Client(base_url=f"{url.rstrip('/')}/rest/v1", timeout=5, headers=headers)
 
     def save(self, table: str, rows: dict | list[dict]) -> None:
         if not rows:
