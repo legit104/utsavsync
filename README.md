@@ -14,6 +14,11 @@ profiles, not code.
 
 ## Quick start (backend)
 
+**Windows:** double-click `hackathon_backend/start.bat`. The first run sets everything up;
+after that it starts in a few seconds. Then open http://localhost:8000/docs.
+
+**Manual / macOS / Linux:**
+
 ```bash
 cd hackathon_backend
 python -m venv .venv

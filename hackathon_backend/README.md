@@ -11,6 +11,12 @@ Rule-based, no ML, free and open source only.
 
 ## Run it
 
+**Windows shortcut:** double-click `start.bat` (or run `.\start.bat`). It creates the Python
+environment and installs packages the first time, reinstalls only when `requirements.txt`
+changes, and then starts the server.
+
+Manual steps:
+
 ```bash
 python -m venv .venv
 .venv\Scripts\activate          # macOS/Linux: source .venv/bin/activate
