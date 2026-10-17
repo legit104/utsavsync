@@ -7,7 +7,7 @@ database. When SUPABASE_URL and SUPABASE_SERVICE_KEY are set:
   and festivals that exist only in the `festivals` table are loaded too;
 * every decision, group, SWM task, notification and live site status is
   written as it happens;
-* one-time volunteer access codes are checked and redeemed.
+* volunteer access codes (email-bound or open, with a use limit) are redeemed.
 
 Writes go through a background thread, in order, so a slow network never
 slows the API down. Failures are logged, never raised.
@@ -20,7 +20,6 @@ import os
 import queue
 import ssl
 import threading
-from datetime import datetime, timezone
 
 import httpx
 
@@ -128,23 +127,16 @@ class SupabaseStorage:
             return []
 
     def redeem_volunteer_code(self, email: str, code_hash: str) -> dict | None:
-        """Atomically consume one active, email-bound volunteer invitation (raises on network errors)."""
-        now = datetime.now(timezone.utc).isoformat()
-        response = self.client.patch(
-            "/volunteer_access_codes",
-            params={
-                "select": "id,email",
-                "email": f"eq.{email.lower()}",
-                "code_hash": f"eq.{code_hash}",
-                "redeemed_at": "is.null",
-                "expires_at": f"gt.{now}",
-            },
-            json={"redeemed_at": now, "redeemed_by": email.lower()},
-            headers={"Prefer": "return=representation"},
-        )
+        """Use up one redemption of an active code (email-bound or open), atomically in the database.
+
+        Returns None when the code is unknown, expired, used up or bound to another
+        email; raises on network/database errors.
+        """
+        response = self.client.post("/rpc/redeem_volunteer_code",
+                                    json={"p_code_hash": code_hash, "p_email": email.lower()})
         response.raise_for_status()
         rows = response.json()
-        return rows[0] if rows else None
+        return {"id": rows[0]["code_id"], "email": rows[0]["redeemed_email"]} if rows else None
 
     # ------------------------------------------------------- profile sync
 

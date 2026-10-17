@@ -102,3 +102,47 @@ def test_sign_up_role_never_makes_a_volunteer(monkeypatch):
 def test_schema_has_volunteer_codes_table():
     columns = schema_columns()["volunteer_access_codes"]
     assert {"email", "code_hash", "expires_at", "redeemed_at"} <= set(columns)
+
+
+def test_storage_redeems_through_database_function():
+    import httpx
+    from app.storage import SupabaseStorage
+
+    sent = []
+    replies = iter([[{"code_id": "c1", "redeemed_email": "vol@utsavsync.in"}], []])
+
+    def handler(request):
+        sent.append(request)
+        return httpx.Response(200, json=next(replies))
+
+    storage = SupabaseStorage("https://x.supabase.co", "sb_secret_abc", background=False)
+    storage.client._transport = httpx.MockTransport(handler)
+    assert storage.redeem_volunteer_code("VOL@utsavsync.in", "hash1") == {"id": "c1", "email": "vol@utsavsync.in"}
+    assert storage.redeem_volunteer_code("vol@utsavsync.in", "hash1") is None  # used up / wrong email
+    assert sent[0].url.path == "/rest/v1/rpc/redeem_volunteer_code"
+    assert sent[0].read() == b'{"p_code_hash":"hash1","p_email":"vol@utsavsync.in"}'
+
+
+@pytest.mark.parametrize("args, message", [
+    ([], "either a volunteer email address or --any-email"),
+    (["a@b.in", "--any-email"], "either a volunteer email address or --any-email"),
+    (["--any-email", "--uses", "0"], "--uses must be between 1 and 1000"),
+])
+def test_code_script_rejects_bad_options(args, message):
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    env = {**__import__("os").environ, "SUPABASE_URL": "https://x.supabase.co", "SUPABASE_SERVICE_KEY": "sb_secret_x"}
+    result = subprocess.run([sys.executable, "issue_volunteer_code.py", *args], capture_output=True, text=True,
+                            cwd=Path(__file__).resolve().parent.parent, env=env, timeout=60)
+    assert result.returncode != 0 and message in result.stderr
+
+
+def test_schema_supports_open_codes_with_use_limits():
+    from test_storage import SCHEMA
+    columns = schema_columns()["volunteer_access_codes"]
+    assert {"max_uses", "use_count"} <= set(columns) and columns["email"] is False  # email optional
+    assert "create or replace function public.redeem_volunteer_code" in SCHEMA
+    assert "(c.email is null or c.email = lower(p_email))" in SCHEMA
+    assert "c.use_count < c.max_uses" in SCHEMA

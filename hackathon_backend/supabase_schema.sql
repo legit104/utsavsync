@@ -170,18 +170,48 @@ create table if not exists notifications (
 create index if not exists notifications_user on notifications (user_id, created_at desc);
 
 
--- 9. One-use volunteer passes, bound to an email. Only SHA-256 hashes of the
---    codes are stored; create one with: python issue_volunteer_code.py <email>
+-- 9. Volunteer access codes. Only SHA-256 hashes of the codes are stored.
+--    email set   -> only that account's email can redeem it
+--    email null  -> any signed-in email can redeem it ("open" code)
+--    max_uses    -> how many times it can be redeemed in total
+--    Create one with: python issue_volunteer_code.py <email>   or   --any-email --uses 5
 create table if not exists volunteer_access_codes (
   id          uuid primary key default gen_random_uuid(),
-  email       text not null,
+  email       text,
   code_hash   text not null unique,
   expires_at  timestamptz not null,
-  redeemed_at timestamptz,
-  redeemed_by text,
+  max_uses    int  not null default 1 check (max_uses > 0),
+  use_count   int  not null default 0,
+  redeemed_at timestamptz,                      -- last redemption
+  redeemed_by text,                             -- last email that redeemed it
   created_at  timestamptz not null default now()
 );
 create index if not exists volunteer_access_codes_email on volunteer_access_codes (email, expires_at);
+
+-- Upgrade a table created by an earlier version of this file (safe to re-run).
+alter table volunteer_access_codes alter column email drop not null;
+alter table volunteer_access_codes add column if not exists max_uses  int not null default 1;
+alter table volunteer_access_codes add column if not exists use_count int not null default 0;
+update volunteer_access_codes set use_count = 1 where redeemed_at is not null and use_count = 0;
+
+-- Redeem a code in one step, so two people using the last remaining use at the
+-- same moment can't both get in (the UPDATE locks the row).
+create or replace function public.redeem_volunteer_code(p_code_hash text, p_email text)
+returns table (code_id uuid, redeemed_email text)
+language sql
+security definer set search_path = public
+as $$
+  update volunteer_access_codes c
+     set use_count = c.use_count + 1, redeemed_at = now(), redeemed_by = lower(p_email)
+   where c.code_hash = p_code_hash
+     and (c.email is null or c.email = lower(p_email))
+     and c.expires_at > now()
+     and c.use_count < c.max_uses
+  returning c.id, lower(p_email);
+$$;
+-- Only the backend (secret key) may call it; never the browser.
+revoke all on function public.redeem_volunteer_code(text, text) from public, anon, authenticated;
+grant execute on function public.redeem_volunteer_code(text, text) to service_role;
 
 
 -- Row level security: on for every table. The backend's secret key bypasses it.

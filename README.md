@@ -45,17 +45,23 @@ demo login, and without the Supabase settings nobody can sign in.
 **Visitors** sign in with their account.
 
 **Volunteers** cannot gain access by selecting the Volunteer tile or setting a browser header.
-Their coordinator issues a unique, email-bound, one-use code; the backend stores only its
-SHA-256 hash in `volunteer_access_codes`, redeems it atomically, and returns an eight-hour
-signed pass. Picking "Volunteer" at sign-up never grants volunteer rights.
+A coordinator issues an access code; the backend stores only its SHA-256 hash in
+`volunteer_access_codes`, redeems it atomically in the database, and returns an eight-hour
+signed pass. Picking "Volunteer" at sign-up never grants volunteer rights. Codes can be:
+
+- **email-bound** (default): only that account can use it, once;
+- **open** (`--any-email`): any signed-in account can use it, up to `--uses` times in total.
+  Convenient for a team, but anyone holding the code can use it, so keep the expiry short.
 
 1. Run `hackathon_backend/supabase_schema.sql` in the Supabase SQL editor (safe to re-run).
 2. Set `VOLUNTEER_SESSION_SECRET` in `hackathon_backend/.env` to a random value, e.g.
    `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
-3. Create a code: `cd hackathon_backend` then
-   `.venv\Scripts\python issue_volunteer_code.py volunteer@example.org --expires-hours 72`.
+3. Create a code from `hackathon_backend`:
+   - `.venv\Scripts\python issue_volunteer_code.py volunteer@example.org --expires-hours 72`
+   - `.venv\Scripts\python issue_volunteer_code.py --any-email --uses 5 --expires-hours 12`
+
    Share the printed code privately.
-4. The volunteer selects **Volunteer**, signs in with that email and enters the code.
+4. The volunteer selects **Volunteer**, signs in with their account and enters the code.
 
 Volunteer-only actions are enforced by the API: field reports, sensor updates, site closures,
 pickup completion, festival profile changes, simulation controls and the reroute demo.
