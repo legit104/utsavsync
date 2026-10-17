@@ -1,233 +1,80 @@
+* { box-sizing: border-box; }
+html, body, #root { width: 100%; min-height: 100%; margin: 0; }
+body { font-family: Arial, Helvetica, sans-serif; color: #064b3b; }
+button, input { font: inherit; }
 
-* {
-  box-sizing: border-box;
-}
+.login-page { position: relative; width: 100%; min-height: 100vh; min-height: 100dvh; overflow: hidden; display: grid; place-items: center; background: #fff4df; }
+.login-art { position: absolute; inset: 0; background: url('/festive-ornamental-login.png') center / 100% 100% no-repeat; }
+.login-card { position: relative; z-index: 1; width: 33.53%; height: 79.28%; margin: 0; overflow: visible; background: transparent; color: #064b3b; container-type: size; }
 
-html,
-body,
-#root {
-  width: 100%;
-  min-height: 100%;
-  margin: 0;
-}
+.brand-block { position: absolute; inset: 0; height: 100%; text-align: center; pointer-events: none; }
+.brand-name { position: absolute; top: 3.7%; left: 0; width: 100%; margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 9cqw; line-height: .98; font-weight: 700; letter-spacing: -.045em; }
+.brand-name span:first-child { color: #07513f; }
+.brand-name span:last-child { color: #e74612; }
+.brand-tagline { position: absolute; top: 11.6%; left: 0; width: 100%; margin: 0; color: #607283; font: 700 3.9cqw Georgia, 'Times New Roman', serif; }
+.ornament-rule { display: none; }
+.brand-block h2 { position: absolute; top: 21.8%; width: 100%; margin: 0; font: 700 5.4cqw Georgia, 'Times New Roman', serif; letter-spacing: -.025em; color: #064b3b; line-height: 1.05; }
+.welcome-copy { position: absolute; top: 26.8%; left: 4%; width: 92%; margin: 0; color: #52697a; font-size: 2.65cqw; line-height: 1.1; white-space: nowrap; }
 
-body {
-  font-family: Arial, sans-serif;
-}
+.role-choices { position: absolute; z-index: 2; inset: 0; pointer-events: none; }
+.role-choice { position: absolute; pointer-events: auto; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding: 0; border: 0; border-radius: 15px; background: transparent; cursor: pointer; transition: none; }
+.visitor-choice { left: 3.75%; top: 30.3%; width: 45.5%; height: 20.6%; color: #e83e17; }
+.volunteer-choice { left: 51.25%; top: 30.3%; width: 45.2%; height: 20.6%; color: #07513f; }
+.visitor-choice.selected, .visitor-choice:hover { background: rgba(255, 130, 24, .2); }
+.volunteer-choice.selected, .volunteer-choice:hover { background: rgba(8, 116, 83, .2); }
+.role-choice:not(.visitor-choice):not(.volunteer-choice):hover { background: rgba(255, 255, 255, .18); }
+.role-choice:focus-visible { outline: 0; box-shadow: inset 0 0 0 3px #345f93; }
+.password-toggle:focus-visible, .forgot-link:focus-visible, .signin-button:focus-visible { outline: 3px solid #345f93; outline-offset: 2px; }
+.role-choice strong { position: absolute; top: 58%; font: 700 4.8cqw Georgia, 'Times New Roman', serif; line-height: 1.05; }
+.role-choice span { position: absolute; top: 80%; color: #50697c; font-size: 2.85cqw; white-space: nowrap; }
 
-.login-page {
-  position: relative;
-  width: 100%;
-  height: 100vh;
-  height: 100dvh;
-  overflow: hidden;
-  background: #fff5df;
-}
+.login-form { position: absolute; z-index: 1; inset: 0; }
+.field-label { position: absolute; left: 4.4%; font-size: 3cqw; font-weight: 700; }
+.email-label { top: 51.7%; }
+.password-label { top: 63.3%; }
+.field-wrap { position: absolute; left: 4.5%; width: 91%; height: 8.2%; display: flex; align-items: center; padding: 0 3%; border: 0; border-radius: 12px; background: transparent; color: #526991; }
+.email-wrap { top: 54.7%; }
+.password-wrap { top: 66.2%; }
+.field-wrap input { min-width: 0; width: 100%; height: 100%; padding: 0 0 0 9%; border: 0; outline: 0; background: transparent; color: #173d31; font-size: 2.85cqw; }
+.field-wrap input::placeholder { color: #858b92; opacity: 1; }
+.field-wrap:focus-within { filter: drop-shadow(0 0 2px rgba(8, 116, 76, .55)); }
+.password-toggle { position: absolute; right: 3.7%; top: 0; width: 8%; height: 100%; padding: 0; border: 0; border-radius: 12px; background: transparent; cursor: pointer; }
+.password-hidden::after { content: ""; position: absolute; top: 50%; left: 18%; width: 64%; height: 3px; border-radius: 2px; background: #526991; transform: translate(15%, -50%) rotate(45deg); box-shadow: 0 0 0 1px rgba(255,255,255,.8); pointer-events: none; }
+.login-options { position: absolute; top: 77.5%; left: 5%; width: 90%; display: flex; align-items: center; justify-content: space-between; font-size: 2.85cqw; }
+.remember-option { position: relative; display: inline-flex; align-items: center; gap: 0; padding-left: 6.3cqw; white-space: nowrap; cursor: pointer; }
+.remember-option input { appearance: none; position: absolute; left: 0; top: -1.1cqh; width: 6.2cqw; height: 5.1cqw; margin: 0; border: 2px solid #56718d; border-radius: 4px; background: rgba(255, 255, 255, .97); cursor: pointer; }
+.remember-option input:checked { border-color: #087453; background: #087453; box-shadow: none; }
+.remember-option span { transform: translateY(-.5cqh); }
+.remember-option:has(input:checked)::after { content: ""; position: absolute; left: 2.2cqw; top: calc(50% - .5cqh); width: 1.4cqw; height: 2.4cqw; border-right: .28cqw solid #fff; border-bottom: .28cqw solid #fff; transform: translateY(-62%) rotate(45deg); pointer-events: none; }
+.forgot-link { border: 0; padding: 2px 0; background: transparent; color: #e64012; font-size: inherit; text-decoration: none; text-underline-offset: 3px; transition: text-decoration-color .15s ease; cursor: pointer; }
+.signin-button { position: absolute; top: 83.8%; left: 4.3%; width: 91.4%; height: 11.8%; display: flex; align-items: center; justify-content: center; gap: 3.9cqw; padding-bottom: 1cqh; border: 0; border-radius: 12px; background: transparent; color: #fff8e9; font: 700 5.35cqw Georgia, 'Times New Roman', serif; cursor: pointer; }
+.forgot-link:hover, .forgot-link:focus-visible { text-decoration: underline; text-decoration-color: #e64012; }
+.signin-button span:first-child { transition: transform .18s ease, text-shadow .18s ease; }
+.signin-button:hover span:first-child { transform: translateY(-2px) scale(1.08); text-shadow: 0 2px 5px rgba(92, 31, 0, .35); }
+.signin-button:hover { filter: brightness(1.06); }
 
-/* Keep the artwork sharp and use it as the actual base layer. */
-.login-art {
-  position: absolute;
-  inset: 0;
-  background-image: url('/utsavsync-festival.png');
-  background-size: 100% 100%;
-  background-position: center;
-  background-repeat: no-repeat;
-}
+.login-message { position: fixed; z-index: 9; left: 50%; bottom: 16px; transform: translateX(-50%); max-width: min(92vw, 520px); margin: 0; padding: 10px 16px; border: 1px solid #e4c78b; border-radius: 8px; background: #fff8e9; color: #174d38; text-align: center; font-size: 14px; box-shadow: 0 5px 18px #68401222; }
 
-/* Every hotspot is transparent: the artwork remains visible. */
-.hotspot {
-   position: absolute;
-  z-index: 5;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  outline: none;
-  box-shadow: none;
-  color: white;
-  cursor: pointer;
-  text-align: center;
-}
 
-.hotspot:focus-visible {
-  outline: 3px solid #08744c;
-  outline-offset: 2px;
-}
 
-/* Visitor and Volunteer artwork buttons */
-.visitor-hotspot {
-  left: 44.1%;
-  top: 38.5%;
-  width: 11.2%;
-  height: 15.5%;
+.language-picker { position: fixed; z-index: 4; top: 18px; right: 20px; display: flex; align-items: center; gap: 8px; padding: 8px 10px 8px 13px; border: 1px solid #e8c98f; border-radius: 999px; background: rgba(255, 251, 241, .94); color: #315447; box-shadow: 0 4px 14px rgba(75, 52, 20, .12); font-size: 12px; font-weight: 700; }
+.language-picker select, .dashboard-language select { padding: 5px 24px 5px 9px; border: 1px solid #dfc38f; border-radius: 999px; background: #fffdf8; color: #174d3b; font-size: 12px; font-weight: 700; cursor: pointer; }
+.volunteer-gate-backdrop { position: fixed; z-index: 10; inset: 0; display: grid; place-items: center; padding: 18px; background: rgba(22, 42, 37, .42); backdrop-filter: blur(3px); }
+.volunteer-gate { position: relative; width: min(420px, 100%); max-height: calc(100dvh - 36px); overflow: auto; padding: 28px; border: 1px solid #f0a63a; border-radius: 22px; background: #fffaf0; color: #104c3a; box-shadow: 0 24px 70px rgba(32, 37, 27, .3); text-align: center; }
+.volunteer-gate .gate-emblem { display: inline-grid; place-items: center; width: 44px; height: 44px; margin-bottom: 12px; border-radius: 50%; background: #fff0d4; color: #e76512; font-size: 28px; }
+.volunteer-gate .eyebrow { color: #bd5a1d; }
+.volunteer-gate h2 { margin: 6px 0 8px; font: 700 25px Georgia, serif; }
+.volunteer-gate > p:not(.eyebrow) { margin: 0 0 20px; color: #657482; line-height: 1.5; }
+.volunteer-gate form { display: grid; gap: 10px; text-align: left; }
+.volunteer-gate form label { font-size: 13px; font-weight: 700; }
+.volunteer-gate form input { height: 46px; padding: 0 13px; border: 1px solid #c8d1d8; border-radius: 10px; background: white; color: #174d3b; outline-color: #0b7958; }
+.gate-submit { min-height: 46px; margin-top: 6px; border: 0; border-radius: 10px; background: linear-gradient(100deg, #ed4a14, #ff8f20); color: white; font-weight: 800; cursor: pointer; }
+.gate-submit:disabled { opacity: .65; cursor: wait; }
+.gate-cancel { min-height: 38px; border: 0; background: transparent; color: #546b71; font-weight: 700; cursor: pointer; }
+.gate-close { position: absolute; top: 10px; right: 12px; width: 34px; height: 34px; border: 0; border-radius: 50%; background: #f7ead7; color: #425a56; font-size: 24px; cursor: pointer; }
+@media (max-width: 600px) { .language-picker { top: 12px; right: 12px; padding: 6px 8px; font-size: 11px; } .language-picker select { max-width: 92px; } }
 
-}
 
-.volunteer-hotspot {
-  left: 56.6%;
-  top: 38.5%;
-  width: 11.2%;
-  height: 15.5%;
-}
-
-.visitor-hotspot.selected,
-.volunteer-hotspot.selected {
-  outline: none;
-  box-shadow: none;
-
-}
-
-/* Real inputs placed over the input fields in the artwork */
-.login-form {
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-}
-
-.login-form input[type='email'],
-.login-form input[type='password'] {
-  position: absolute;
-  left: 44.7%;
-  width: 22.2%;
-  height: 5.2%;
-  min-height: 30px;
-  padding: 0 12px;
-  border: 1px solid rgba(116, 95, 59, 0.28);
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.94);
-  color: #173c30;
-  font-size: clamp(10px, 1vw, 16px);
-  outline: none;
-}
-
-.login-form input[type='email'] {
-  top: 59.1%;
-  left: 44.3%;
-  width: 27.5%;
-  height: 5.2%;
-}
-
-.login-form input[type='password'] {
-  top: 68.1%;
-  left: 44.3%;
-  width: 27.5%;
-  height: 5.2%;
-}
-
-.login-form input[type='email']:focus,
-.login-form input[type='password']:focus {
-  border: 2px solid #08744c;
-  box-shadow: 0 0 0 2px rgba(8, 116, 76, 0.12);
-}
-
-.login-form input::placeholder {
-  color: #73777e;
-  opacity: 1;
-}
-
-/* Checkbox over the artwork's Remember me checkbox */
-.remember-input {
-  position: absolute;
-  left: 44.3%;
-  top: 74.1%;
-  width: 17px;
-  height: 17px;
-  accent-color: #08744c;
-  cursor: pointer;
-}
-
-/* Transparent click areas over the artwork's existing text */
-.forgot-hotspot {
- left: 63.5%;
-  top: 73.2%;
-  width: 8%;
-  height: 3.5%;
-}
-
-.signin-hotspot {
-   left: 44%;
-  top: 78.5%;
-  width: 28.5%;
-  height: 8.7%;
-  border-radius: 12px;
-}
-
-.signup-hotspot {
-  left: 58.5%;
-  top: 91.5%;
-  width: 8.5%;
-  height: 3.8%;
-}
-
-.login-message {
-  position: absolute;
-  left: 43%;
-  top: 88%;
-  width: 26%;
-  margin: 0;
-  padding: 8px 10px;
-  border: 1px solid #e4c78b;
-  border-radius: 8px;
-  background: #fff8e9;
-  color: #174d38;
-  text-align: center;
-  font-size: clamp(10px, 0.9vw, 14px);
-}
-
-/* Small prototype label in the upper-right corner */
-.demo-label {
-  position: absolute;
-  z-index: 1;
-  top: 3.5%;
-  right: 4%;
-  color: white;
-  font-size: clamp(9px, 0.9vw, 14px);
-  text-shadow: 0 1px 4px #321a0e;
-  pointer-events: none;
-}
-
-/* Mobile layout: preserve the artwork and keep the controls usable. */
-@media (max-width: 600px) {
-  .login-page {
-    min-height: 600px;
-    height: 100dvh;
-    overflow: auto;
-  }
-
-  .login-art {
-    background-size: 100% 100%;
-  }
-
-  .login-form input[type='email'],
-  .login-form input[type='password'] {
-    padding: 0 7px;
-    min-height: 26px;
-    border-radius: 6px;
-  }
-
-  .remember-input {
-    width: 13px;
-    height: 13px;
-  }
-}
-.hotspot strong {
-  color: #ffffff;
-  font-size: clamp(12px, 1.4vw, 22px);
-  font-weight: 800;
-  text-shadow: 0 2px 5px rgba(0, 0, 0, 0.85);
-}
-
-.hotspot span {
-  color: #ffffff;
-  font-size: clamp(9px, 0.9vw, 14px);
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.9);
-}
-
-.visitor-hotspot.selected,
-.volunteer-hotspot.selected {
-  outline: none;
-  border: none;
-  box-shadow: none;
-}
+.volunteer-preview-button { position: fixed; z-index: 8; right: 26px; bottom: 22px; display: inline-flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 20px; border: 1px solid #f2b346; border-radius: 999px; background: #07513f; color: #fff8e9; box-shadow: 0 8px 22px rgba(45, 54, 36, .2); font-size: 14px; font-weight: 800; cursor: pointer; }
+.volunteer-preview-button:hover { filter: brightness(1.08); transform: translateY(-1px); }
+@media (max-width: 600px) { .volunteer-preview-button { right: 12px; bottom: 12px; min-height: 42px; padding: 0 14px; font-size: 12px; } }

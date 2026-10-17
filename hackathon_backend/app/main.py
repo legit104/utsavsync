@@ -7,17 +7,19 @@ Docs: http://localhost:8000/docs
 from __future__ import annotations
 
 import os
+import hashlib
 import threading
 from contextlib import contextmanager
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+import httpx
 
-from .auth import User, auth_enabled, current_user, require_volunteer
+from .auth import User, auth_enabled, current_user, issue_volunteer_token, require_volunteer
 from .engine import FestivalEngine, NotFoundError, to_hhmm
 from .models import (AdvanceClock, CompleteTask, FieldReport, GroupRequest, Report, SensorUpdate, SimulateRequest,
-                     SiteAction, WhatIf)
+                     SiteAction, VolunteerAccessCode, WhatIf)
 from .profiles import FestivalProfile, load_profiles, save_profile
 from .simulation import run_reroute_demo, simulate_day
 from .storage import storage_from_env
@@ -93,6 +95,25 @@ def me(user: User = Depends(current_user)):
     return {"id": user.id, "email": user.email, "role": user.role, "auth": "supabase" if auth_enabled() else "off"}
 
 
+@app.post("/volunteers/verify-code", tags=["auth"])
+def verify_volunteer_code(body: VolunteerAccessCode):
+    """Redeem a one-time email-bound code and issue a short-lived volunteer session."""
+    if storage is None:
+        raise HTTPException(503, "Volunteer verification needs Supabase database settings on the backend")
+    if not os.getenv("VOLUNTEER_SESSION_SECRET"):
+        raise HTTPException(503, "Volunteer sessions are not configured on this server")
+    email = body.email.strip().lower()
+    code_hash = hashlib.sha256(body.access_code.strip().encode("utf-8")).hexdigest()
+    try:
+        invite = storage.redeem_volunteer_code(email, code_hash)
+    except httpx.HTTPError as exc:
+        raise HTTPException(503, "Could not verify the volunteer code in the database") from exc
+    if invite is None:
+        raise HTTPException(403, "This volunteer code is invalid, expired, already used, or assigned to another email")
+    token, expires = issue_volunteer_token("volunteer:" + email, email)
+    return {"access_token": token, "token_type": "bearer", "expires_at": expires,
+            "user_id": "volunteer:" + email, "role": "volunteer"}
+
 # --------------------------------------------------------------- profiles
 
 @app.get("/festivals", tags=["profiles"])
@@ -102,7 +123,7 @@ def list_festivals():
             for e in engines.values()]
 
 
-@app.post("/festivals", status_code=201, tags=["profiles"])
+@app.post("/festivals", status_code=201, tags=["profiles"], dependencies=[Depends(require_volunteer)])
 def add_festival(profile: FestivalProfile, overwrite: bool = False):
     """Add a festival live by uploading its profile. No code changes needed."""
     if profile.id in profiles and not overwrite:
@@ -114,7 +135,7 @@ def add_festival(profile: FestivalProfile, overwrite: bool = False):
     return {"message": f"{profile.name} is live with {len(profile.sites)} sites.", "id": profile.id}
 
 
-@app.post("/festivals/reload", tags=["profiles"])
+@app.post("/festivals/reload", tags=["profiles"], dependencies=[Depends(require_volunteer)])
 def reload_festivals():
     """Re-read every JSON file in profiles/ and restart those festivals from scratch."""
     loaded = load_profiles()
@@ -130,7 +151,7 @@ def get_profile(festival_id: str):
         return engine.profile
 
 
-@app.post("/festivals/{festival_id}/reset", tags=["profiles"])
+@app.post("/festivals/{festival_id}/reset", tags=["profiles"], dependencies=[Depends(require_volunteer)])
 def reset_festival(festival_id: str):
     """Start the festival day over (clock back to opening time, no groups or tasks)."""
     with festival(festival_id) as engine:
@@ -286,7 +307,7 @@ def swm_routes(festival_id: str):
 
 # -------------------------------------------------------------- simulation
 
-@app.post("/festivals/{festival_id}/clock/advance", tags=["simulation"])
+@app.post("/festivals/{festival_id}/clock/advance", tags=["simulation"], dependencies=[Depends(require_volunteer)])
 def advance_clock(festival_id: str, body: AdvanceClock):
     """Move simulated time forward: groups arrive and leave, bins fill."""
     with festival(festival_id) as engine:
@@ -302,14 +323,14 @@ def what_if(festival_id: str, scenario: WhatIf):
         return engine.what_if(scenario.model_dump())
 
 
-@app.post("/festivals/{festival_id}/demo/reroute", tags=["simulation"])
+@app.post("/festivals/{festival_id}/demo/reroute", tags=["simulation"], dependencies=[Depends(require_volunteer)])
 def demo_reroute(festival_id: str, site_id: str | None = None):
     """Live demo: book groups at a site, then a volunteer reports a surge. Watch them get rerouted."""
     with festival(festival_id) as engine:
         return run_reroute_demo(engine, site_id)
 
 
-@app.post("/festivals/{festival_id}/simulate", tags=["simulation"])
+@app.post("/festivals/{festival_id}/simulate", tags=["simulation"], dependencies=[Depends(require_volunteer)])
 def simulate(festival_id: str, body: SimulateRequest = SimulateRequest()):
     """Simulate a full festival day of 50-100 requests and reports."""
     if festival_id not in profiles:
@@ -321,3 +342,5 @@ def simulate(festival_id: str, body: SimulateRequest = SimulateRequest()):
             engine.persist_all()
             engines[festival_id] = engine
     return {"summary": summary, "status": engine.snapshot(), "decision_log": engine.log}
+
+

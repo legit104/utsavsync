@@ -7,6 +7,19 @@ from pydantic import BaseModel, Field, model_validator
 from .profiles import HHMM
 
 
+
+class VolunteerAccessCode(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+    access_code: str = Field(min_length=12, max_length=128)
+
+    @model_validator(mode="after")
+    def valid_email(self):
+        self.email = self.email.strip().lower()
+        if "@" not in self.email or "." not in self.email.rsplit("@", 1)[-1]:
+            raise ValueError("Enter the email address associated with your volunteer code")
+        self.access_code = self.access_code.strip()
+        return self
+
 class GroupRequest(BaseModel):
     group_name: str | None = Field(None, examples=["Patil family"])
     group_size: int = Field(gt=0, examples=[25])
@@ -83,3 +96,4 @@ class SimulateRequest(BaseModel):
     events: int = Field(75, ge=50, le=100, description="Requests + reports in the day")
     seed: int = 42
     replace_live: bool = Field(False, description="Make the simulated day the live state shown on the dashboard")
+

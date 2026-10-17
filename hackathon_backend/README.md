@@ -46,7 +46,7 @@ The service key stays on the backend only, never in the React app.
 `AUTH_MODE=off` (default) skips login so the frontend can integrate early. With
 `AUTH_MODE=supabase` plus `SUPABASE_URL` and `SUPABASE_ANON_KEY`, the React app signs users in
 with Supabase Auth and sends `Authorization: Bearer <access token>`. The backend reads the role
-(`visitor` or `volunteer`) from `app_metadata.role`, falling back to `user_metadata.role`.
+(`visitor` or `volunteer`) only from trusted `app_metadata.role`; browser-editable `user_metadata.role` is ignored. Volunteer access may also be granted by redeeming a one-use coordinator code.
 
 | Who | Can call |
 |---|---|
@@ -180,3 +180,12 @@ Example decision:
 Copy a file in `profiles/`, change sites, timings, thresholds, bins, waste rates and rules, and
 either drop it in `profiles/` (then `POST /festivals/reload`) or `POST` it to `/festivals`.
 Festival hours must fall within one calendar day.
+
+## Volunteer access codes
+
+Run the volunteer_access_codes table section in supabase_schema.sql. Set SUPABASE_URL, SUPABASE_SERVICE_KEY, and VOLUNTEER_SESSION_SECRET in the backend .env. Generate a random signing secret locally and never expose it to the frontend.
+
+Issue a unique email-bound one-use pass from this folder with:
+python issue_volunteer_code.py volunteer@example.org --expires-hours 72
+
+The script prints the code once and writes only its SHA-256 hash to Supabase. The API consumes it atomically, returns an eight-hour signed token, and requires that token for volunteer operations. The browser role selector alone cannot grant the role. English, Hindi, or Marathi selected on login remains active on the dashboard.

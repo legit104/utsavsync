@@ -7,7 +7,7 @@ backend, trimmed where marked `…`. Interactive docs with "Try it out": **http:
 
 | UI wording | API value |
 |---|---|
-| Crowd status GREEN / ORANGE / RED | `"GREEN"` / `"AMBER"` / `"RED"` (plus `"CLOSED"`). Show AMBER in orange. |
+| Crowd status GREEN / AMBER / RED | `"GREEN"` / `"AMBER"` / `"RED"` (plus `"CLOSED"`). Show AMBER in amber/gold. |
 | ALLOCATE / DIVERT / REJECT | `"ALLOCATED"` / `"DIVERTED"` / `"REJECTED"` (plus `"REROUTED"` for automatic moves) |
 | Visitor / Volunteer | `"visitor"` / `"volunteer"` |
 
@@ -41,45 +41,13 @@ CORS is open to all origins in development, so Vite on 5173/5174 can call it dir
 - The frontend sends the Supabase access token on every request:
   `Authorization: Bearer <session.access_token>`.
 - The backend checks the token with Supabase and reads the role from
-  **`app_metadata.role`** (trusted, set by an admin), falling back to **`user_metadata.role`**.
+  **`app_metadata.role`** (trusted, set by an admin), and never from **`user_metadata.role`**.
   No role means `visitor`.
-- **Right now `AUTH_MODE=off`**, so no login is needed while you integrate. To fake a user,
-  send `X-User-Id: <any id>` (needed for `/my-groups`). When Supabase is set up we flip
-  `AUTH_MODE=supabase` and the same frontend code keeps working.
+- Local demo mode supports visitor access. X-Role never grants volunteer privileges.
+- Volunteer-only access requires trusted Supabase app_metadata.role=volunteer or a one-use, email-bound coordinator code redeemed at POST /volunteers/verify-code.
+Volunteer access codes are issued by an administrator with issue_volunteer_code.py. The database stores a SHA-256 hash, binds each code to one email, and permits one redemption. POST /volunteers/verify-code accepts { "email": "...", "access_code": "..." } and returns an eight-hour signed bearer token. Configure VOLUNTEER_SESSION_SECRET and Supabase service credentials on the backend before issuing codes.
 
-Sign-up storing the role (frontend):
-
-```js
-await supabase.auth.signUp({
-  email, password,
-  options: { data: { role: "volunteer" } }   // or "visitor"
-});
-```
-
-> For the demo it's fine for users to pick their role at sign-up. For a real launch, volunteers
-> should be approved by setting `app_metadata.role` from the Supabase dashboard, because
-> `user_metadata` can be edited by the user.
-
-One fetch helper for the whole app:
-
-```js
-const API = import.meta.env.VITE_API_URL;
-
-export async function api(path, { method = "GET", body } = {}) {
-  const { data } = await supabase.auth.getSession();
-  const res = await fetch(`${API}${path}`, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      ...(data.session && { Authorization: `Bearer ${data.session.access_token}` }),
-    },
-    body: body && JSON.stringify(body),
-  });
-  const json = await res.json();
-  if (!res.ok) throw new Error(typeof json.detail === "string" ? json.detail : "Invalid input");
-  return json;
-}
-```
+Frontend calls use the shared helper in src/api.js. Supabase email/password is handled in src/auth.js when configured; without it, only visitor preview access is available.
 
 **Who can call what**
 
@@ -453,3 +421,4 @@ Errors always have a `detail` field. Show `detail` when it's a string.
 | 403 | Wrong role | `"Only volunteers can do this"` |
 | 404 | Unknown festival, site or task | `"Unknown site 'nope' for festival 'ganesh_utsav'"` |
 | 422 | Invalid body | `detail` is a list: `[{ "loc": ["body", "group_size"], "msg": "Input should be greater than 0" }]` |
+

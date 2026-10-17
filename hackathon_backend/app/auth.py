@@ -1,17 +1,15 @@
-"""Login and roles (Visitor / Volunteer) using Supabase Auth.
+"""Identity resolution for visitor requests and approved volunteer sessions.
 
-AUTH_MODE=off (default): nothing is checked, so the frontend can integrate
-before Supabase is set up. Send `X-User-Id` to fake a logged-in user.
-
-AUTH_MODE=supabase: protected calls need `Authorization: Bearer <access token>`
-from supabase.auth.signInWithPassword(). The backend asks Supabase who the
-token belongs to and reads the role from app_metadata.role (only settable with
-the service key, so trusted), falling back to user_metadata.role (chosen at
-sign-up). Anything else is treated as a visitor.
+Visitors remain available in the demo. Volunteer-only actions require either a
+valid Supabase app_metadata role or a signed, short-lived session issued after
+a one-time database invite code is redeemed.
 """
-
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
+import json
 import os
 import time
 from dataclasses import dataclass
@@ -21,6 +19,7 @@ from fastapi import Depends, Header, HTTPException
 
 ROLES = ("visitor", "volunteer")
 CACHE_SECONDS = 60
+VOLUNTEER_SESSION_SECONDS = 8 * 60 * 60
 _cache: dict[str, tuple[float, "User"]] = {}
 
 
@@ -29,7 +28,7 @@ class User:
     id: str | None
     email: str | None
     role: str
-    verified: bool  # False when AUTH_MODE=off: nothing was checked
+    verified: bool
 
     @property
     def reporter_type(self) -> str:
@@ -38,6 +37,45 @@ class User:
 
 def auth_enabled() -> bool:
     return os.getenv("AUTH_MODE", "off").lower() == "supabase"
+
+
+def _session_secret() -> bytes:
+    secret = os.getenv("VOLUNTEER_SESSION_SECRET")
+    if not secret:
+        raise HTTPException(503, "Volunteer sessions are not configured on this server")
+    return secret.encode("utf-8")
+
+
+def _b64(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
+
+def issue_volunteer_token(user_id: str, email: str) -> tuple[str, int]:
+    expires = int(time.time()) + VOLUNTEER_SESSION_SECONDS
+    payload = _b64(json.dumps({
+        "sub": user_id, "email": email, "role": "volunteer", "exp": expires,
+    }, separators=(",", ":")).encode("utf-8"))
+    unsigned = "vs1." + payload
+    signature = _b64(hmac.new(_session_secret(), unsigned.encode("ascii"), hashlib.sha256).digest())
+    return unsigned + "." + signature, expires
+
+
+def _volunteer_from_token(token: str) -> User:
+    try:
+        version, payload, signature = token.split(".", 2)
+        unsigned = version + "." + payload
+        expected = _b64(hmac.new(_session_secret(), unsigned.encode("ascii"), hashlib.sha256).digest())
+        if version != "vs1" or not hmac.compare_digest(signature, expected):
+            raise ValueError("bad signature")
+        decoded = base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4))
+        data = json.loads(decoded)
+        if data.get("role") != "volunteer" or int(data.get("exp", 0)) <= time.time():
+            raise ValueError("expired or wrong role")
+        return User(str(data["sub"]), str(data["email"]), "volunteer", verified=True)
+    except HTTPException:
+        raise
+    except (ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise HTTPException(401, "Volunteer session is invalid or expired") from exc
 
 
 def _lookup(token: str) -> User:
@@ -55,25 +93,28 @@ def _lookup(token: str) -> User:
     if response.status_code != 200:
         raise HTTPException(401, "Login expired or invalid; please sign in again")
     data = response.json()
-    role = ((data.get("app_metadata") or {}).get("role")
-            or (data.get("user_metadata") or {}).get("role") or "visitor").lower()
+    # Only server-controlled app_metadata may grant a volunteer role.
+    role = ((data.get("app_metadata") or {}).get("role") or "visitor").lower()
     user = User(data.get("id"), data.get("email"), role if role in ROLES else "visitor", verified=True)
     _cache[token] = (time.time() + CACHE_SECONDS, user)
     return user
 
 
 def current_user(authorization: str | None = Header(None),
-                 x_user_id: str | None = Header(None, description="Dev only (AUTH_MODE=off): fake user id"),
-                 x_role: str | None = Header(None, description="Dev only (AUTH_MODE=off): visitor or volunteer")) -> User:
-    if not auth_enabled():
-        role = (x_role or "visitor").lower()
-        return User(x_user_id, None, role if role in ROLES else "visitor", verified=False)
-    if not authorization or not authorization.lower().startswith("bearer "):
+                 x_user_id: str | None = Header(None, description="Demo visitor id; never grants volunteer access")) -> User:
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization.split(" ", 1)[1].strip()
+        if token.startswith("vs1."):
+            return _volunteer_from_token(token)
+        if auth_enabled():
+            return _lookup(token)
+    if auth_enabled():
         raise HTTPException(401, "Sign in required: send 'Authorization: Bearer <access token>'")
-    return _lookup(authorization.split(" ", 1)[1].strip())
+    # X-Role is intentionally ignored. A browser cannot self-assign volunteer privileges.
+    return User(x_user_id, None, "visitor", verified=False)
 
 
 def require_volunteer(user: User = Depends(current_user)) -> User:
-    if user.verified and user.role != "volunteer":
-        raise HTTPException(403, "Only volunteers can do this")
+    if not user.verified or user.role != "volunteer":
+        raise HTTPException(403, "A verified volunteer account and access code are required")
     return user

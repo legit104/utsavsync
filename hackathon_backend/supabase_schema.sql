@@ -26,3 +26,16 @@ create index if not exists swm_tasks_open on swm_tasks (festival_id, status);
 
 alter table decision_log enable row level security;
 alter table swm_tasks enable row level security;
+
+-- One-use volunteer passes. The API stores only SHA-256 hashes.
+create table if not exists volunteer_access_codes (
+  id          uuid primary key default gen_random_uuid(),
+  email       text not null,
+  code_hash   text not null unique,
+  expires_at  timestamptz not null,
+  redeemed_at timestamptz,
+  redeemed_by text,
+  created_at  timestamptz not null default now()
+);
+create index if not exists volunteer_access_codes_email on volunteer_access_codes (email, expires_at);
+alter table volunteer_access_codes enable row level security;
