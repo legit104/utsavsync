@@ -68,6 +68,10 @@ class Rules(BaseModel):
     slot_shift_penalty_km: float = Field(1.5, ge=0, description="A one-slot delay costs the same as walking this far")
     volunteer_report_weight: float = Field(0.8, ge=0, le=1)
     citizen_report_weight: float = Field(0.4, ge=0, le=1)
+    queue_enabled: bool = Field(True, description="Queue groups when no site is safe, instead of rejecting them")
+    queue_max_wait_minutes: int = Field(60, gt=0, description="A queued group is released with a 'sorry' after this")
+    max_queue_size: int = Field(100, gt=0)
+    queue_max_skips: int = Field(3, ge=0, description="How often later groups may be placed before the front group")
 
 
 class Waste(BaseModel):

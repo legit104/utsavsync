@@ -204,3 +204,14 @@
 @media(max-width:900px){.location-planner-layout{grid-template-columns:1fr}.location-quick-panel{max-width:none}}
 .volunteer-ops-layout{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(250px,.75fr);gap:18px;align-items:start;margin:18px 0 22px}.volunteer-ops-map{min-width:0}.volunteer-ops-map .section-heading{margin:0 0 10px}.volunteer-ops-map h3{margin:0;font:800 19px Manrope,sans-serif;color:#174d3b}.swm-quick-panel{display:grid;gap:12px}.swm-quick-panel label{display:grid;gap:6px;color:#43516a;font-size:11px;font-weight:800}.swm-quick-panel select,.swm-quick-panel input{width:100%;min-height:40px;padding:8px 10px;border:1px solid #e6d8c6;border-radius:9px;background:#fff;color:#243651;font-size:12px}.swm-quick-panel .primary-button{width:100%;justify-content:center}
 @media(max-width:900px){.volunteer-ops-layout{grid-template-columns:1fr}.swm-quick-panel{max-width:none}}
+
+/* Volunteer alert when a site turns RED */
+.red-alerts{position:fixed;z-index:2000;bottom:18px;right:18px;display:flex;flex-direction:column;gap:10px;width:min(380px,calc(100vw - 36px))}
+.red-alert{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border:1px solid #f1b3ad;border-left:6px solid #df5c55;border-radius:12px;background:#fff6f5;box-shadow:0 10px 26px #7a1e1626;animation:red-alert-in .25s ease-out}
+.red-alert strong{display:block;color:#9c2a22;font-size:14px}
+.red-alert small{display:block;margin-top:3px;color:#6b4a46;font-size:12px;line-height:1.35}
+.red-alert-icon{display:grid;flex:0 0 26px;width:26px;height:26px;place-items:center;border-radius:50%;background:#df5c55;color:#fff;font-weight:900}
+.red-alert button{margin-left:auto;padding:0 4px;border:0;background:none;color:#9c2a22;font-size:20px;line-height:1;cursor:pointer}
+@keyframes red-alert-in{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+.queue-list{display:flex;flex-direction:column;gap:8px;margin-bottom:18px}
+.queue-item{border-left:4px solid #ee9b1d}

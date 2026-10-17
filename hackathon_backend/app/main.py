@@ -24,7 +24,7 @@ from .engine import FestivalEngine, NotFoundError, to_hhmm
 from .models import (AdvanceClock, CompleteTask, FieldReport, GroupRequest, Report, SensorUpdate, SimulateRequest,
                      SiteAction, VolunteerAccessCode, WhatIf)
 from .profiles import FestivalProfile, load_profiles, save_profile
-from .simulation import run_reroute_demo, simulate_day, warm_up
+from .simulation import ease_queue_demo, run_queue_demo, run_reroute_demo, simulate_day, warm_up
 from .storage import storage_from_env
 
 load_dotenv()
@@ -318,6 +318,7 @@ def my_groups(festival_id: str, user: User = Depends(current_user)):
                 latest[group_id] = entry
         return [{**g.to_dict(), "site_name": engine.sites[g.site_id].name,
                  "site_status": engine.sites[g.site_id].status,
+                 "queue_position": engine.queue_position(g),
                  "latest_update": {k: latest[g.id][k] for k in ("type", "decision", "sim_time", "reason", "notifications")}
                  if g.id in latest else None}
                 for g in groups]
@@ -429,6 +430,21 @@ def demo_reroute(festival_id: str, site_id: str | None = None):
     """Live demo: book groups at a site, then a volunteer reports a surge. Watch them get rerouted."""
     with festival(festival_id) as engine:
         return run_reroute_demo(engine, site_id)
+
+
+@app.post("/festivals/{festival_id}/demo/queue", tags=["simulation"], dependencies=[Depends(require_volunteer)])
+def demo_queue(festival_id: str):
+    """Live demo, step 1: an area fills up (every site RED) and new groups are queued instead of rejected.
+    Step 2 is /demo/queue/ease: the crowd eases at one site and the queue is placed automatically."""
+    with festival(festival_id) as engine:
+        return run_queue_demo(engine)
+
+
+@app.post("/festivals/{festival_id}/demo/queue/ease", tags=["simulation"], dependencies=[Depends(require_volunteer)])
+def demo_queue_ease(festival_id: str, site_id: str):
+    """Live demo, step 2: a volunteer reports the crowd has eased at a site; waiting groups are placed."""
+    with festival(festival_id) as engine:
+        return ease_queue_demo(engine, site_id)
 
 
 @app.post("/festivals/{festival_id}/simulate", tags=["simulation"], dependencies=[Depends(require_volunteer)])

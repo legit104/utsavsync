@@ -123,6 +123,22 @@ simulation and demo controls) are enforced by the API.
   backend and delete `hackathon_backend/state/`). Editing a festival's profile file also starts
   that festival on a fresh day.
 
+### Waiting queue and RED alerts
+
+- **Queue:** when every safe site nearby is full, a new group is **QUEUED** (with its position)
+  instead of rejected, and is placed automatically as soon as a site has space — first come,
+  first served, but a smaller group may go first if it fits; the front group can be overtaken
+  at most 3 times. Groups that can't be rerouted when their site turns RED also join the queue.
+  A group that waits over 60 minutes is released with an apology. Settings (`queue_enabled`,
+  `queue_max_wait_minutes`, `max_queue_size`, `queue_max_skips`) are in each profile's `rules`.
+  Visitors see their position in **My Groups**; volunteers see the whole queue on **Operations**.
+- **Demo:** volunteer **Operations → Run queue demo** fills the busiest area (every nearby site
+  RED) and queues three groups; **Crowd eases at …** then releases them automatically.
+- **RED alerts:** volunteers get a pop-up (bottom-right) the moment any site turns RED; sites
+  that turn RED together share one alert. **Enable desktop alerts** adds system notifications
+  even when the tab is in the background (needs `localhost` or HTTPS — browsers block them on
+  plain `http://192.168…` addresses, where the in-page alert still works).
+
 ## 5. Online version (optional)
 
 So people can use it from anywhere, without the team laptop:

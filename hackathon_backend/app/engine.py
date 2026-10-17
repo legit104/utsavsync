@@ -21,6 +21,7 @@ from .i18n import notify
 
 GREEN, AMBER, RED, CLOSED = "GREEN", "AMBER", "RED", "CLOSED"
 PENDING, ARRIVED, LEFT, CANCELLED = "PENDING", "ARRIVED", "LEFT", "CANCELLED"
+QUEUED = "QUEUED"
 
 # What a crowd report level means, as a fraction of site capacity.
 LEVEL_FRACTION = {"LOW": 0.3, "MEDIUM": 0.65, "HIGH": 0.9, "CRITICAL": 1.1}
@@ -64,10 +65,12 @@ class Group:
     size: int
     site_id: str
     slot_start: int
-    status: str = PENDING  # PENDING -> ARRIVED -> LEFT, or CANCELLED
+    status: str = PENDING  # (QUEUED ->) PENDING -> ARRIVED -> LEFT, or CANCELLED
     arrived_at: int | None = None
     reroutes: int = 0
     requested_by: str | None = None  # user id of the visitor who booked
+    queued_at: int | None = None     # minute the group joined the waiting queue
+    skips: int = 0                   # times groups behind it were placed first while it waited at the front
 
     def to_dict(self) -> dict:
         return {**asdict(self), "slot_time": to_hhmm(self.slot_start)}
@@ -124,6 +127,7 @@ class FestivalEngine:
         self.log: list[dict] = []
         self._seq = 0
         self._warned: set[tuple[str, int]] = set()
+        self._releasing = False  # guards queue release against re-entry from _refresh
 
     # ------------------------------------------------------------------ helpers
 
@@ -337,8 +341,13 @@ class FestivalEngine:
             if alt:
                 return decide("DIVERTED", alt, f"{why}; no GREEN option nearby, {self._describe(alt)} stays AMBER.", pref)
 
-        return decide("REJECTED", None, f"{why}; no site within {max_km} km over the next "
-                      f"{self.rules['max_slot_shift']} slots can take {size} more people safely.")
+        reason = (f"{why}; no site within {max_km} km over the next "
+                  f"{self.rules['max_slot_shift']} slots can take {size} more people safely.")
+        if self._queue_has_room():
+            return self._enqueue(request_id, name, size, requested, pref, slot, reason, request.get("requested_by"))
+        if self.rules["queue_enabled"]:
+            reason += " The waiting queue is also full."
+        return decide("REJECTED", None, reason)
 
     def _describe(self, option) -> str:
         site, slot, ratio, km = option
@@ -407,6 +416,7 @@ class FestivalEngine:
                 self._reroute_pending(site)
             self._predict_crowd(site)
             self._check_waste(site)
+        self._process_queue()
 
     def _status_actions(self, site: Site) -> list[dict]:
         return {
@@ -448,6 +458,19 @@ class FestivalEngine:
                           ],
                           notifications=notify("REROUTED", group=group.name, site_from=site.name,
                                                site=new_site.name, time=to_hhmm(slot)))
+            elif self._queue_has_room():
+                group.status, group.queued_at, group.skips = QUEUED, self.clock, 0
+                position = self.queue_position(group)
+                self._log("REROUTE", decision="QUEUED", group=group.to_dict(), from_site_id=site.id,
+                          queue_position=position,
+                          reason=f"{site.name} turned {site.status} and no safe site is free nearby, so the group "
+                                 f"joined the waiting queue at position {position}.",
+                          actions=[{"audience": "CITIZEN", "action": "WAIT_IN_QUEUE", "group_id": group.id,
+                                    "position": position},
+                                   {"audience": "VOLUNTEER", "action": "REDIRECT_GROUP_TO_WAIT", "site_id": site.id,
+                                    "group_id": group.id}],
+                          notifications=notify("QUEUED", group=group.name, position=position,
+                                               minutes=self.rules["queue_max_wait_minutes"]))
             else:
                 group.status = CANCELLED
                 self._log("REROUTE", decision="REJECTED", group=group.to_dict(), from_site_id=site.id,
@@ -458,6 +481,112 @@ class FestivalEngine:
                                    {"audience": "BMC_OFFICER", "action": "REVIEW_CANCELLED_GROUP", "group_id": group.id}],
                           notifications=notify("REJECTED", group=group.name))
             self._save_group(group)
+
+    # -------------------------------------------------------------- waiting queue
+    # When no safe slot exists, groups wait here instead of being rejected, and are
+    # placed automatically as soon as a site has space. Order: first come, first
+    # served, but a smaller group behind may go first if it fits ("first that fits");
+    # the front group can be overtaken at most queue_max_skips times, after which
+    # nobody passes it until it is placed.
+
+    def queue(self) -> list[Group]:
+        return sorted((g for g in self.groups.values() if g.status == QUEUED), key=lambda g: (g.queued_at, g.id))
+
+    def queue_position(self, group: Group) -> int | None:
+        return next((i for i, g in enumerate(self.queue(), 1) if g.id == group.id), None)
+
+    def _queue_has_room(self) -> bool:
+        return self.rules["queue_enabled"] and len(self.queue()) < self.rules["max_queue_size"]
+
+    def _enqueue(self, request_id, name, size, requested, pref, slot, reason, requested_by) -> dict:
+        group = Group(self._next_id("GRP"), name, size, pref.id, slot, status=QUEUED,
+                      requested_by=requested_by, queued_at=self.clock)
+        self.groups[group.id] = group
+        position = self.queue_position(group)
+        wait = self.rules["queue_max_wait_minutes"]
+        entry = self._log("ALLOCATION", decision="QUEUED", request_id=request_id, requested_by=requested_by,
+                          group=group.to_dict(), requested=requested, assigned=None, queue_position=position,
+                          reason=f"{reason} Added to the waiting queue at position {position}; it is placed "
+                                 f"automatically when a site has space (waits up to {wait} min).",
+                          actions=[{"audience": "CITIZEN", "action": "WAIT_IN_QUEUE", "group_id": group.id,
+                                    "position": position},
+                                   {"audience": "BMC_OFFICER", "action": "MONITOR_QUEUE",
+                                    "queue_length": len(self.queue())}],
+                          notifications=notify("QUEUED", group=name, position=position, minutes=wait))
+        self._save_group(group)
+        return entry
+
+    def _placement(self, group: Group):
+        """Best safe (site, slot) for a waiting group right now, by the same rules as a new request."""
+        slot = max(group.slot_start, self.slot_of(self.clock))
+        if slot >= self.day_end:
+            return None
+        pref = self.sites[group.site_id]
+        accepts = [{GREEN}, {GREEN, AMBER}] if self.rules["allow_amber_allocation"] else [{GREEN}]
+        for accept in accepts:
+            ratio = self._fits(pref, slot, group.size, accept)
+            if ratio is not None:
+                return pref, slot, ratio, 0.0
+            alt = self._find_alternative(pref, slot, group.size, set(), accept)
+            if alt:
+                return alt
+        return None
+
+    def _release(self, group: Group, option) -> None:
+        site, slot, ratio, km = option
+        waited = self.clock - group.queued_at
+        moved = site.id != group.site_id
+        group.site_id, group.slot_start, group.status = site.id, slot, PENDING
+        self._log("QUEUE_RELEASE", decision="DIVERTED" if moved else "ALLOCATED", group=group.to_dict(),
+                  site_id=site.id, site_name=site.name, waited_minutes=waited,
+                  assigned={"site_id": site.id, "site_name": site.name, "time": to_hhmm(slot),
+                            "projected_occupancy": round(ratio, 3), "distance_km": round(km, 2)},
+                  reason=f"Space opened: {self._describe(option)} after {waited} min in the queue.",
+                  actions=[{"audience": "VOLUNTEER", "action": "EXPECT_GROUP", "site_id": site.id,
+                            "group_id": group.id, "group_size": group.size, "time": to_hhmm(slot)},
+                           {"audience": "CITIZEN", "action": "PROCEED_TO_SITE", "site_id": site.id,
+                            "time": to_hhmm(slot)}],
+                  notifications=notify("QUEUE_RELEASED", group=group.name, site=site.name, time=to_hhmm(slot)))
+        if slot <= self.clock:
+            self._arrive(group)
+        self._save_group(group)
+
+    def _expire(self, group: Group, why: str) -> None:
+        group.status = CANCELLED
+        self._log("QUEUE_EXPIRED", decision="REJECTED", group=group.to_dict(), site_id=group.site_id,
+                  reason=why, actions=[{"audience": "CITIZEN", "action": "RETRY_LATER", "group_id": group.id}],
+                  notifications=notify("QUEUE_EXPIRED", group=group.name))
+        self._save_group(group)
+
+    def _process_queue(self) -> None:
+        if self._releasing or not any(g.status == QUEUED for g in self.groups.values()):
+            return
+        self._releasing = True
+        try:
+            wait = self.rules["queue_max_wait_minutes"]
+            for group in self.queue():
+                if self.clock - group.queued_at >= wait:
+                    self._expire(group, f"No safe space opened within {wait} minutes of waiting.")
+                elif self.slot_of(max(group.slot_start, self.clock)) >= self.day_end:
+                    self._expire(group, "The festival day ended before space opened.")
+            waiting = self.queue()
+            if not waiting:
+                return
+            head, overtook, touched = waiting[0], False, set()
+            for group in waiting:
+                if group is not head and head.status == QUEUED and head.skips >= self.rules["queue_max_skips"]:
+                    break  # the front group has waited long enough: nobody else goes first
+                option = self._placement(group)
+                if option:
+                    self._release(group, option)
+                    touched.add(group.site_id)
+                    overtook = overtook or group is not head
+            if overtook and head.status == QUEUED:
+                head.skips += 1
+            if touched:
+                self._refresh(list(touched), trigger="queue release")
+        finally:
+            self._releasing = False
 
     def crowd_trend(self, site: Site) -> float:
         """People per minute over the last TREND_WINDOW_MINUTES (positive = filling up).
@@ -748,6 +877,10 @@ class FestivalEngine:
             "day": self.profile["day"], "thresholds": self.th,
             "sites": [self.site_view(s) for s in self.sites.values()],
             "groups": dict(Counter(g.status for g in self.groups.values())),
+            "queue": [{"id": g.id, "name": g.name, "size": g.size, "position": i, "site_id": g.site_id,
+                       "site_name": self.sites[g.site_id].name, "wanted_time": to_hhmm(g.slot_start),
+                       "waiting_minutes": self.clock - g.queued_at, "skips": g.skips}
+                      for i, g in enumerate(self.queue(), 1)],
             "open_swm_tasks": sum(t["status"] == "OPEN" for t in self.swm_tasks.values()),
             "log_entries": len(self.log),
         }

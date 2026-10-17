@@ -25,6 +25,21 @@ TEMPLATES = {
         "hi": "सूचना: {site_from} में अब बहुत भीड़ है। आपके समूह {group} को {time} बजे {site} भेजा गया है।",
         "mr": "सूचना: {site_from} येथे आता खूप गर्दी आहे. तुमच्या गट {group} ला {time} वाजता {site} येथे हलवण्यात आले आहे.",
     },
+    "QUEUED": {
+        "en": "All nearby sites are full right now. Group {group} is #{position} in the queue and will be placed automatically when space opens (up to {minutes} min).",
+        "hi": "अभी आस-पास के सभी स्थल भरे हुए हैं। समूह {group} कतार में #{position} पर है और जगह मिलते ही अपने आप भेजा जाएगा (अधिकतम {minutes} मिनट)।",
+        "mr": "सध्या जवळची सर्व स्थळे भरलेली आहेत. गट {group} रांगेत #{position} वर आहे आणि जागा मिळताच आपोआप पाठवला जाईल (कमाल {minutes} मिनिटे).",
+    },
+    "QUEUE_RELEASED": {
+        "en": "Good news: space opened. Group {group} is allocated to {site} at {time}.",
+        "hi": "अच्छी खबर: जगह मिल गई। समूह {group} को {time} बजे {site} आवंटित किया गया है।",
+        "mr": "आनंदाची बातमी: जागा उपलब्ध झाली. गट {group} ला {time} वाजता {site} येथे जागा देण्यात आली आहे.",
+    },
+    "QUEUE_EXPIRED": {
+        "en": "Sorry, no safe space opened for group {group}. Please try again later.",
+        "hi": "क्षमा करें, समूह {group} के लिए कोई सुरक्षित जगह नहीं मिली। कृपया बाद में फिर प्रयास करें।",
+        "mr": "क्षमस्व, गट {group} साठी सुरक्षित जागा मिळाली नाही. कृपया नंतर पुन्हा प्रयत्न करा.",
+    },
     "SWM_TASK": {
         "en": "Waste pickup needed at {site}: bins expected to reach {fill}% soon.",
         "hi": "{site} पर कचरा उठाने की ज़रूरत है: डिब्बे जल्द ही {fill}% तक भर सकते हैं।",

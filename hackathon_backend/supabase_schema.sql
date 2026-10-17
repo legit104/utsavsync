@@ -116,12 +116,16 @@ create table if not exists groups (
   size          int  not null,
   site_id       text not null,
   slot_time     text not null,                  -- 'HH:MM'
-  status        text not null check (status in ('PENDING', 'ARRIVED', 'LEFT', 'CANCELLED')),
+  status        text not null check (status in ('QUEUED', 'PENDING', 'ARRIVED', 'LEFT', 'CANCELLED')),
   reroutes      int  not null default 0,
   payload       jsonb not null,
   updated_at    timestamptz not null default now()
 );
 create index if not exists groups_requested_by on groups (requested_by);
+-- Upgrade: allow the QUEUED status on a groups table created by an earlier version.
+alter table groups drop constraint if exists groups_status_check;
+alter table groups add constraint groups_status_check
+  check (status in ('QUEUED', 'PENDING', 'ARRIVED', 'LEFT', 'CANCELLED'));
 
 
 -- 6. Decision log: every allocation, reroute, status change, report,

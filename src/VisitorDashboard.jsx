@@ -37,6 +37,57 @@ function VisitorDashboard({ onBackToLogin, userEmail, userRole = 'visitor', sess
   const [result, setResult] = useState(null)
   const [reports, setReports] = useState([])
   const [myGroups, setMyGroups] = useState([])
+  const [queue, setQueue] = useState([])
+  const [queueDemo, setQueueDemo] = useState(null)
+  const [redAlerts, setRedAlerts] = useState([])
+  const canNotify = typeof window !== 'undefined' && 'Notification' in window && window.isSecureContext
+  const [desktopAlerts, setDesktopAlerts] = useState(() => canNotify && Notification.permission === 'granted')
+  const seenLogKeys = useRef(null)
+  const alertOnRed = useRef(() => {})
+
+  /* Volunteers get an alert the moment any site turns RED. Built on the engine's decision
+     log, so a site that turns RED and recovers between two refreshes is still reported.
+     Sites that were already RED when the page opened don't alert. */
+  useEffect(() => {
+    alertOnRed.current = entries => {
+      if (userRole !== 'volunteer') return
+      const keyOf = entry => entry.id + '@' + entry.logged_at
+      if (!seenLogKeys.current) {
+        seenLogKeys.current = new Set(entries.map(keyOf))
+        return
+      }
+      const fresh = entries.filter(entry => !seenLogKeys.current.has(keyOf(entry)))
+      fresh.forEach(entry => seenLogKeys.current.add(keyOf(entry)))
+      const turnedRed = fresh.filter(entry => entry.type === 'STATUS_CHANGE' && entry.to_status === 'RED')
+      if (!turnedRed.length) return
+      const alerts = turnedRed.map(entry => ({
+        key: keyOf(entry), site: entry.site_name, time: entry.sim_time,
+        occupancy: Math.round((entry.occupancy || 0) * 100),
+      }))
+      // Sites that turn RED together become one card, so alerts never pile up over the page.
+      setRedAlerts(current => [{ key: alerts[0].key, time: alerts[0].time, sites: alerts }, ...current].slice(0, 3))
+      if (desktopAlerts && canNotify && Notification.permission === 'granted') {
+        const title = alerts.length === 1 ? `UtsavSync: ${alerts[0].site} turned RED` : `UtsavSync: ${alerts.length} sites turned RED`
+        const body = alerts.map(alert => `${alert.site} — ${alert.occupancy}% at ${alert.time}`).join('\n') +
+          '\nStop new entry and start crowd control.'
+        try { new Notification(title, { body, tag: alerts[0].key }) } catch { /* notifications blocked */ }
+      }
+    }
+  })
+
+  useEffect(() => {
+    if (!redAlerts.length) return undefined
+    const timer = setTimeout(() => setRedAlerts(current => current.slice(0, -1)), 30000)
+    return () => clearTimeout(timer)
+  }, [redAlerts])
+
+  async function enableDesktopAlerts() {
+    if (!canNotify) return
+    const permission = await Notification.requestPermission()
+    setDesktopAlerts(permission === 'granted')
+    setApiMessage(permission === 'granted' ? 'Desktop alerts on: you will be notified when a site turns RED, even in another tab.'
+      : 'Desktop alerts were blocked in this browser. In-page alerts still work.')
+  }
   const [reportType, setReportType] = useState('Crowd issue')
   const [crowdLevel, setCrowdLevel] = useState('HIGH')
   const [wasteFill, setWasteFill] = useState(85)
@@ -123,6 +174,7 @@ function VisitorDashboard({ onBackToLogin, userEmail, userRole = 'visitor', sess
   useEffect(() => {
     let active = true
     let inFlight = false
+    seenLogKeys.current = null  // a new festival: don't alert on its existing RED sites
     // Keep every open screen in step with the shared engine: site status, pickups,
     // routes, the decision log and this user's groups. Skipped while the tab is hidden.
     const pollStatus = async () => {
@@ -139,9 +191,10 @@ function VisitorDashboard({ onBackToLogin, userEmail, userRole = 'visitor', sess
         if (!active) return
         if (tasks) setSwmTasks(tasks)
         if (routes) setSwmRoutes(routes)
-        if (entries) setDecisionLog([...entries].reverse())
+        if (entries) { setDecisionLog([...entries].reverse()); alertOnRed.current(entries) }
         if (groups) setMyGroups(groups)
         if (!status) return
+        setQueue(status.queue || [])
         setLocations(status.sites.map(site => ({
           id: site.id, name: site.name,
           area: site.facilities?.join(' · ') || 'Festival site',
@@ -178,9 +231,11 @@ function VisitorDashboard({ onBackToLogin, userEmail, userRole = 'visitor', sess
       waste: Math.round((site.waste?.fill || 0) * 100), wasteForecast: Math.round((site.waste?.forecast_fill || 0) * 100),
       trend: site.trend_people_per_hour || 0, status: site.status, closed: site.closed })))
     setSimTime(status.sim_time)
+    setQueue(status.queue || [])
     setSwmTasks(tasks)
     setSwmRoutes(routes)
     setDecisionLog([...entries].reverse())
+    alertOnRed.current(entries)
     setMyGroups(groups)
   }
 
@@ -207,6 +262,29 @@ function VisitorDashboard({ onBackToLogin, userEmail, userRole = 'visitor', sess
         ? `Live demo complete: ${rerouted} pending group(s) automatically rerouted after ${demo.site_name} turned ${demo.status_after}.`
         : `Surge reported at ${demo.site_name} (${demo.status_after}); ${booked} demo groups were booked, but none were pending in the reroute window. Reset the festival and try again.`)
       setPage('Decision Log')
+    } catch (error) { setApiMessage(error.message) }
+  }
+
+  async function runQueueDemo() {
+    try {
+      if (!connected) throw new Error('Start the Festival Operations Engine before running the queue demo.')
+      setApiMessage('')
+      const demo = await api(`/festivals/${festivalId}/demo/queue`, { method: 'POST', ...credentials })
+      setQueueDemo(demo)
+      await refreshOperations()
+      setApiMessage(`${demo.area.length} nearby sites are RED, so ${demo.queued} new group(s) joined the waiting queue instead of being rejected. Click "Crowd eases at ${demo.ease_site_name}" to release them.`)
+    } catch (error) { setApiMessage(error.message) }
+  }
+
+  async function easeQueueDemo() {
+    if (!queueDemo) return
+    try {
+      const eased = await api(`/festivals/${festivalId}/demo/queue/ease?site_id=${encodeURIComponent(queueDemo.ease_site_id)}`, { method: 'POST', ...credentials })
+      setQueueDemo(null)
+      await refreshOperations()
+      setApiMessage(eased.released.length
+        ? `Crowd eased at ${eased.site_name}: ${eased.released.length} waiting group(s) were placed automatically.`
+        : `Crowd eased at ${eased.site_name}, but no waiting group fits there yet.`)
     } catch (error) { setApiMessage(error.message) }
   }
 
@@ -324,7 +402,7 @@ function VisitorDashboard({ onBackToLogin, userEmail, userRole = 'visitor', sess
       })
       const decision = response.decision
       setResult({ decision: decision.decision, reason: decision.reason,
-        location: decision.assigned?.site_name || 'No allocation', group,
+        location: decision.assigned?.site_name || (decision.decision === 'QUEUED' ? `Waiting · #${decision.queue_position} in queue` : 'No allocation'), group,
         projected: decision.assigned?.projected_occupancy, notifications: decision.notifications })
       const updated = await api(`/festivals/${festivalId}/status`)
       setSimTime(updated.sim_time)
@@ -431,6 +509,18 @@ function VisitorDashboard({ onBackToLogin, userEmail, userRole = 'visitor', sess
           </div>
         </header>
 
+        {userRole === 'volunteer' && redAlerts.length > 0 && <div className="red-alerts" role="alert" aria-live="assertive">
+          {redAlerts.map(alert => <div className="red-alert" key={alert.key}>
+            <span className="red-alert-icon" aria-hidden="true">!</span>
+            <div>
+              <strong>{alert.sites.length === 1 ? `${alert.sites[0].site} turned RED` : `${alert.sites.length} sites turned RED`}</strong>
+              <small>{alert.sites.length === 1
+                ? `${alert.sites[0].occupancy}% full at ${alert.time} · stop new entry; groups due here are being rerouted`
+                : `${alert.sites.slice(0, 3).map(item => `${item.site} (${item.occupancy}%)`).join(', ')}${alert.sites.length > 3 ? ` and ${alert.sites.length - 3} more` : ''} at ${alert.time} · stop new entry`}</small>
+            </div>
+            <button type="button" aria-label="Dismiss alert" onClick={() => setRedAlerts(current => current.filter(item => item.key !== alert.key))}>×</button>
+          </div>)}
+        </div>}
         <div className="demo-banner">
           {apiMessage || (connected ? `LIVE ENGINE · ${festival} · Simulated time ${simTime}` : 'DEMO MODE · Illustrative data only — not live BMC information')}
         </div>
@@ -574,7 +664,7 @@ function VisitorDashboard({ onBackToLogin, userEmail, userRole = 'visitor', sess
             {myGroups.length === 0 ? <div className="empty-state"><span>♧</span><strong>No groups allocated yet</strong><p>Submit a group request and the operations engine will recommend a safe site and time.</p><button className="primary-button" onClick={() => setPage('Locations')}>Request a visit →</button></div> :
               <div className="group-list">{myGroups.map(group => <article className="group-card" key={group.id}>
                 <div className="group-card-top"><div><span className="eyebrow">{group.id}</span><h3>{group.name}</h3></div><span className={`status-pill ${group.status === 'PENDING' ? 'green' : group.status === 'CANCELLED' ? 'red' : 'orange'}`}>{group.status}</span></div>
-                <div className="group-details"><span>Site<strong>{group.site_name}</strong></span><span>Group<strong>{group.size} people</strong></span><span>Arrival<strong>{group.slot_time}</strong></span><span>Reroutes<strong>{group.reroutes || 0}</strong></span></div>
+                <div className="group-details"><span>Site<strong>{group.site_name}</strong></span><span>Group<strong>{group.size} people</strong></span><span>Arrival<strong>{group.slot_time}</strong></span><span>Reroutes<strong>{group.reroutes || 0}</strong></span>{group.queue_position && <span>Queue<strong>#{group.queue_position}</strong></span>}</div>
                 {group.latest_update && <div className="decision-notification"><strong>{group.latest_update.decision}</strong> · {group.latest_update.reason}<p>{group.latest_update.notifications?.[language] || group.latest_update.notifications?.en}</p></div>}
               </article>)}</div>}
           </section>
@@ -703,7 +793,7 @@ function VisitorDashboard({ onBackToLogin, userEmail, userRole = 'visitor', sess
           <section className="panel">
             <div className="section-heading">
               <div><p className="eyebrow">FESTIVAL CONTROL ROOM · {simTime || 'ENGINE OFFLINE'}</p><h2>Live operations</h2></div>
-              <div className="ops-actions"><button className="primary-button" onClick={runRerouteDemo} disabled={!connected}>Run live surge &amp; reroute demo →</button><button className="small-button" onClick={resetFestival} disabled={!connected}>Reset festival day</button></div>
+              <div className="ops-actions"><button className="primary-button" onClick={runRerouteDemo} disabled={!connected}>Run live surge &amp; reroute demo →</button><button className="small-button" onClick={runQueueDemo} disabled={!connected}>Run queue demo</button>{queueDemo && <button className="primary-button" onClick={easeQueueDemo}>Crowd eases at {queueDemo.ease_site_name} →</button>}<button className="small-button" onClick={resetFestival} disabled={!connected}>Reset festival day</button>{canNotify && !desktopAlerts && <button className="small-button" onClick={enableDesktopAlerts}>Enable desktop alerts</button>}</div>
             </div>
             <div className="ops-intro"><span className="hero-tag">VOLUNTEER CONTROL ROOM</span><p>Monitor crowd safety, coordinate field reports and act on waste pickup tasks. The reroute demo books groups, triggers a critical crowd report, then shows the engine moving pending groups automatically.</p></div>
             <div className="status-grid">
@@ -727,6 +817,12 @@ function VisitorDashboard({ onBackToLogin, userEmail, userRole = 'visitor', sess
               </form>
             </div>
             <div className="clock-controls"><strong>Advance simulation clock</strong><span>Moves arrivals forward and updates crowd and waste forecasts.</span><div>{[30, 60, 180].map(minutes => <button className="small-button" key={minutes} onClick={() => advanceFestivalClock(minutes)} disabled={!connected}>+{minutes} min</button>)}</div></div>
+            <div className="section-heading task-heading"><div><p className="eyebrow">WAITING QUEUE</p><h2>Groups waiting for space</h2></div><span className="demo-label">{queue.length} waiting</span></div>
+            {queue.length === 0 ? <p className="muted">No groups waiting. When every safe site nearby is full, new groups wait here and are placed automatically as space opens.</p> :
+              <div className="queue-list">{queue.map(item => <article className="report-item queue-item" key={item.id}>
+                <strong>#{item.position} · {item.name} · {item.size} people</strong>
+                <small>Wants {item.site_name} at {item.wanted_time} · waiting {item.waiting_minutes} min{item.skips ? ` · overtaken ${item.skips}×` : ''}</small>
+              </article>)}</div>}
             <div className="section-heading task-heading"><div><p className="eyebrow">SOLID WASTE MANAGEMENT</p><h2>Open pickup tasks</h2></div></div>
             {swmTasks.filter(task => task.status === 'OPEN').length === 0 ? <p className="muted">No open pickup tasks. The engine creates tasks when current or forecast bin fill reaches its configured trigger.</p> :
               swmTasks.filter(task => task.status === 'OPEN').map(task => <article className="report-item" key={task.id}>

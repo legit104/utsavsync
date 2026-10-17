@@ -61,6 +61,53 @@ def _demo_site(engine: FestivalEngine):
     return min(candidates, key=lambda s: s.occupancy)
 
 
+QUEUE_DEMO_GROUPS = (("Shah family", 12), ("College group", 30), ("Patil family", 8))
+
+
+def run_queue_demo(engine: FestivalEngine) -> dict:
+    """Fill the busiest site's whole neighbourhood (every site within reroute range turns RED),
+    then three groups ask for the busiest site: with nowhere safe, they join the queue."""
+    max_km = engine.rules["max_reroute_distance_km"]
+    open_sites = [s for s in engine.sites.values() if not s.closed]
+    if not open_sites:
+        raise ValueError("Every site is closed; reopen one first.")
+    target = max(open_sites, key=lambda s: (s.config.get("popularity", 1.0), s.occupancy))
+    area = [s for s in open_sites if s is target or distance_km(target.config, s.config) <= max_km]
+    if engine.slot_of(engine.clock) + engine.slot * (engine.rules["max_slot_shift"] + 1) > engine.day_end:
+        raise ValueError("Not enough festival time left for the demo; reset the festival first.")
+    start = len(engine.log)
+    for site in area:
+        if site.status != "RED":
+            engine.report({"site_id": site.id, "reporter_type": "volunteer", "kind": "crowd",
+                           "crowd_level": "CRITICAL", "note": "Demo: the whole area is packed"})
+    requests = [engine.allocate({"group_name": name, "group_size": size, "preferred_site_id": target.id})
+                for name, size in QUEUE_DEMO_GROUPS]
+    ease = min((s for s in area if s is not target), key=lambda s: distance_km(target.config, s.config), default=target)
+    return {
+        "area": [{"site_id": s.id, "site_name": s.name, "status": s.status} for s in area],
+        "requests": [{"group": r["group"], "decision": r["decision"], "queue_position": r.get("queue_position")}
+                     for r in requests],
+        "queued": sum(r["decision"] == "QUEUED" for r in requests),
+        "ease_site_id": ease.id, "ease_site_name": ease.name,
+        "events": engine.log[start:],
+    }
+
+
+def ease_queue_demo(engine: FestivalEngine, site_id: str) -> dict:
+    """A volunteer reports the crowd has thinned at one site: the queue is placed automatically."""
+    site = engine.site(site_id)
+    start = len(engine.log)
+    engine.report({"site_id": site.id, "reporter_type": "volunteer", "kind": "crowd", "crowd_count":
+                   round(site.capacity * 0.2), "note": "Demo: crowd has eased"})
+    events = engine.log[start:]
+    return {
+        "site_id": site.id, "site_name": site.name, "status_after": site.status,
+        "released": [e for e in events if e["type"] == "QUEUE_RELEASE"],
+        "still_waiting": len(engine.queue()),
+        "events": events,
+    }
+
+
 def run_reroute_demo(engine: FestivalEngine, site_id: str | None = None) -> dict:
     """Book groups into a site's next slot, then a volunteer reports it CRITICAL.
 
