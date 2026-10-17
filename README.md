@@ -90,9 +90,9 @@ about 2 seconds. Two ways to share one backend:
 - **Online:** use the GitHub Pages site with the Render backend (see "Online version").
 - **Same Wi-Fi, no accounts needed:** on the team laptop run `hackathon_backend\start-lan.bat`
   and `npm.cmd run dev:lan` in separate terminals. The backend window prints the laptop's IPv4
-  address (e.g. `192.168.1.25`). Set `VITE_API_URL=http://192.168.1.25:8000` in the repo-root
-  `.env` and restart Vite; everyone then opens `http://192.168.1.25:5173`. Windows may ask to
-  allow Python and Node through the firewall: allow **Private networks** only.
+  address (e.g. `192.168.1.25`); everyone opens `http://THAT-ADDRESS:5173`. No `.env` change is
+  needed: when the site is opened through that address it finds the backend there by itself.
+  Windows may ask to allow Python and Node through the firewall: allow **Private networks** only.
 
 The backend keeps the live festival in memory, so keep its terminal running; restarting it
 resets the day to the profile's live start. Use Wi-Fi sharing only on a trusted network.
