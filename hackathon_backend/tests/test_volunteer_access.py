@@ -146,3 +146,17 @@ def test_schema_supports_open_codes_with_use_limits():
     assert "create or replace function public.redeem_volunteer_code" in SCHEMA
     assert "(c.email is null or c.email = lower(p_email))" in SCHEMA
     assert "c.use_count < c.max_uses" in SCHEMA
+
+
+def test_wifi_mode_accepts_private_addresses_only(monkeypatch):
+    """start-lan.bat's CORS pattern: laptops on the same Wi-Fi yes, other websites no."""
+    import re
+    from pathlib import Path
+
+    bat = (Path(__file__).resolve().parent.parent / "start.bat").read_text(encoding="utf-8")
+    pattern = re.search(r'set "CORS_ORIGIN_REGEX=(.+)"', bat).group(1)
+    for origin in ("http://192.168.1.25:5173", "http://10.0.0.7:5173", "http://172.20.3.4:5173", "http://localhost:5173"):
+        assert re.fullmatch(pattern, origin), origin
+    for origin in ("http://evil.example:5173", "http://192.168.1.25.evil.example:5173", "http://8.8.8.8:5173",
+                   "http://172.32.0.1:5173", "http://192.168.1.25:8080"):
+        assert not re.fullmatch(pattern, origin), origin

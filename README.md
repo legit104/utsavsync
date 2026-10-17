@@ -80,16 +80,19 @@ pickup completion, festival profile changes, simulation controls and the reroute
 Then open http://localhost:5173 (API docs at http://localhost:8000/docs). On macOS/Linux, follow
 the backend README and use `npm run dev`. Run `npm install` once after pulling new frontend packages.
 
-### Live updates between team devices
+### Same live view on several laptops
 
-Run the backend and frontend on the team laptop, with both devices on the same trusted Wi-Fi:
+Every open screen refreshes from the backend every 2 seconds (paused while the tab is hidden):
+site colours, the map, pickups, routes, the decision log and My Groups. So any laptop using the
+**same backend** sees the same festival, and a change made on one appears on the others within
+about 2 seconds. Two ways to share one backend:
 
-1. On the team laptop, run `hackathon_backend/start-lan.bat` and `npm run dev:lan` in separate terminals.
-2. Find the team laptop's IPv4 address with `ipconfig` (for example, `192.168.1.25`).
-3. In the repo-root `.env`, set `VITE_API_URL=http://192.168.1.25:8000`, then restart Vite.
-4. On both devices, open `http://192.168.1.25:5173` and sign in to the same festival engine.
+- **Online:** use the GitHub Pages site with the Render backend (see "Online version").
+- **Same Wi-Fi, no accounts needed:** on the team laptop run `hackathon_backend\start-lan.bat`
+  and `npm.cmd run dev:lan` in separate terminals. The backend window prints the laptop's IPv4
+  address (e.g. `192.168.1.25`). Set `VITE_API_URL=http://192.168.1.25:8000` in the repo-root
+  `.env` and restart Vite; everyone then opens `http://192.168.1.25:5173`. Windows may ask to
+  allow Python and Node through the firewall: allow **Private networks** only.
 
-The visitor dashboard checks site status every 2 seconds, so a volunteer closing or reopening a site
-will appear automatically. The backend keeps live state in memory, so leave its terminal running;
-restarting it resets the festival state. Use this only on a trusted network, and keep Supabase auth
-configured for volunteer actions.
+The backend keeps the live festival in memory, so keep its terminal running; restarting it
+resets the day to the profile's live start. Use Wi-Fi sharing only on a trusted network.

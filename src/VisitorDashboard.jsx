@@ -123,12 +123,25 @@ function VisitorDashboard({ onBackToLogin, userEmail, userRole = 'visitor', sess
   useEffect(() => {
     let active = true
     let inFlight = false
+    // Keep every open screen in step with the shared engine: site status, pickups,
+    // routes, the decision log and this user's groups. Skipped while the tab is hidden.
     const pollStatus = async () => {
-      if (inFlight) return
+      if (inFlight || document.visibilityState === 'hidden') return
       inFlight = true
       try {
-        const status = await api(`/festivals/${festivalId}/status`)
+        const [status, tasks, routes, entries, groups] = await Promise.allSettled([
+          api(`/festivals/${festivalId}/status`),
+          api(`/festivals/${festivalId}/swm/tasks`),
+          api(`/festivals/${festivalId}/swm/routes`),
+          api(`/festivals/${festivalId}/log?limit=50`),
+          api(`/festivals/${festivalId}/my-groups`, credentials),
+        ]).then(results => results.map(result => result.status === 'fulfilled' ? result.value : null))
         if (!active) return
+        if (tasks) setSwmTasks(tasks)
+        if (routes) setSwmRoutes(routes)
+        if (entries) setDecisionLog([...entries].reverse())
+        if (groups) setMyGroups(groups)
+        if (!status) return
         setLocations(status.sites.map(site => ({
           id: site.id, name: site.name,
           area: site.facilities?.join(' · ') || 'Festival site',
@@ -148,8 +161,9 @@ function VisitorDashboard({ onBackToLogin, userEmail, userRole = 'visitor', sess
       }
     }
     const timer = window.setInterval(pollStatus, 2000)
-    return () => { active = false; window.clearInterval(timer) }
-  }, [festivalId])
+    document.addEventListener('visibilitychange', pollStatus)
+    return () => { active = false; window.clearInterval(timer); document.removeEventListener('visibilitychange', pollStatus) }
+  }, [festivalId, credentials])
   async function refreshOperations() {
     const [status, tasks, routes, entries, groups] = await Promise.all([
       api(`/festivals/${festivalId}/status`),
