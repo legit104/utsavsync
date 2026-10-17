@@ -9,3 +9,11 @@ import os
 for name in ("SUPABASE_URL", "SUPABASE_SERVICE_KEY", "SUPABASE_ANON_KEY"):
     os.environ[name] = ""
 os.environ["AUTH_MODE"] = "off"
+os.environ["VOLUNTEER_SESSION_SECRET"] = "test-only-volunteer-session-secret"
+
+
+def volunteer_headers(email: str = "volunteer@utsavsync.test") -> dict:
+    """A signed volunteer pass, as issued after redeeming an access code."""
+    from app.auth import issue_volunteer_token
+    token, _ = issue_volunteer_token("volunteer:" + email, email)
+    return {"Authorization": "Bearer " + token}

@@ -17,6 +17,8 @@ from dataclasses import dataclass
 import httpx
 from fastapi import Depends, Header, HTTPException
 
+from .storage import tls_verify
+
 ROLES = ("visitor", "volunteer")
 CACHE_SECONDS = 60
 VOLUNTEER_SESSION_SECONDS = 8 * 60 * 60
@@ -86,7 +88,7 @@ def _lookup(token: str) -> User:
     if not url or not key:
         raise HTTPException(500, "AUTH_MODE=supabase needs SUPABASE_URL and SUPABASE_ANON_KEY in .env")
     try:
-        response = httpx.get(f"{url.rstrip('/')}/auth/v1/user", timeout=5,
+        response = httpx.get(f"{url.rstrip('/')}/auth/v1/user", timeout=5, verify=tls_verify(),
                              headers={"apikey": key, "Authorization": f"Bearer {token}"})
     except httpx.HTTPError as exc:
         raise HTTPException(503, "Could not reach Supabase Auth") from exc
@@ -108,6 +110,13 @@ def current_user(authorization: str | None = Header(None),
             return _volunteer_from_token(token)
         if auth_enabled():
             return _lookup(token)
+        # Login not enforced, but a real Supabase login still identifies the user,
+        # so bookings and "my groups" follow the account.
+        if token and os.getenv("SUPABASE_URL") and os.getenv("SUPABASE_ANON_KEY"):
+            try:
+                return _lookup(token)
+            except HTTPException:
+                pass
     if auth_enabled():
         raise HTTPException(401, "Sign in required: send 'Authorization: Bearer <access token>'")
     # X-Role is intentionally ignored. A browser cannot self-assign volunteer privileges.

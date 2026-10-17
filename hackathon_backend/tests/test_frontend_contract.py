@@ -8,18 +8,19 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import auth, main
+from conftest import volunteer_headers
 
 FRONTEND_SRC = Path(__file__).resolve().parents[2] / "src"
 F = "/festivals/ganesh_utsav"
 DEMO = {"X-User-Id": "utsavsync-demo-user", "X-Role": "visitor"}
-VOLUNTEER = {"X-User-Id": "utsavsync-demo-user", "X-Role": "volunteer"}
+VOLUNTEER = volunteer_headers()
 
 
 @pytest.fixture
 def client(monkeypatch):
     monkeypatch.setattr(main, "save_profile", lambda profile: None)  # don't write profiles/ during tests
     c = TestClient(main.app)
-    c.post(F + "/reset")
+    c.post(F + "/reset", headers=VOLUNTEER)
     return c
 
 

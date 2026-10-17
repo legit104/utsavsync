@@ -1,30 +1,67 @@
-# React + Vite
+# UtsavSync — Festival Operations Engine
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Keeping Mumbai's festival crowds moving and its streets clean (PS 01, BMC Project Swachchha).
 
-Currently, two official plugins are available:
+UtsavSync allocates visitor groups to festival sites and time slots, monitors crowd status
+(GREEN / AMBER / RED), reroutes groups automatically when a site becomes unsafe, and raises
+SWM pickup tasks before bins overflow. New festivals are added through configuration
+profiles, not code. The whole interface is available in English, Hindi and Marathi.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+| Part | Where | Stack |
+|---|---|---|
+| Frontend | repo root (`src/`, `public/`, `index.html`) | React + Vite, Leaflet + OpenStreetMap |
+| Backend | [`hackathon_backend/`](hackathon_backend/) — see its [README](hackathon_backend/README.md) and [API contract](hackathon_backend/API_CONTRACT.md) | Python + FastAPI |
+| Database & login | Supabase (PostgreSQL + Auth) | |
 
-## React Compiler
+## Run it
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Two terminals, both left open:
 
-## Expanding the ESLint configuration
+```bash
+hackathon_backend\start.bat
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+```bash
+npm.cmd run dev
+```
 
-## Volunteer verification and language
+Then open http://localhost:5173 (API docs at http://localhost:8000/docs). On macOS/Linux, follow
+the backend README and use `npm run dev`. Run `npm install` once after pulling new frontend packages.
 
-The login language choice is saved in the browser and follows the visitor or volunteer into the dashboard (English, Hindi or Marathi). To enable real email/password sign-in and password recovery, configure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in the frontend environment. Without those values, visitor login remains a local demo flow.
+## Settings
 
-Volunteers cannot gain access by selecting the Volunteer tile or setting a browser header. Their coordinator issues a unique, email-bound, one-use code. The backend stores only the SHA-256 hash in volunteer_access_codes, redeems it atomically, and returns an eight-hour signed token. The token signing secret and Supabase service key stay on the backend.
+| File | Contents |
+|---|---|
+| `.env` (repo root, copy `frontend.env.example`) | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` (the **publishable** key only), `VITE_API_URL` |
+| `hackathon_backend/.env` (copy `.env.example`) | `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` (secret), `SUPABASE_ANON_KEY`, `AUTH_MODE=supabase`, `VOLUNTEER_SESSION_SECRET` |
 
-Setup:
-1. Run hackathon_backend/supabase_schema.sql in the Supabase SQL editor.
-2. Configure SUPABASE_URL, SUPABASE_SERVICE_KEY, and a random VOLUNTEER_SESSION_SECRET in hackathon_backend/.env. Keep both secrets private.
-3. Create a volunteer code with cd hackathon_backend then python issue_volunteer_code.py volunteer@example.org --expires-hours 72. Share the printed code with that person privately.
-4. Start the backend. Select Volunteer, sign in with the invited email, and enter the code. The pass expires and works only once.
+Both `.env` files are git-ignored. Never commit them or share the secret key.
 
-Volunteer privileges are enforced by FastAPI on the server, including field reports, sensor updates, site closures, pickup completion, festival profile changes, simulation controls, and the reroute demo. In Supabase Auth mode, only server-controlled app_metadata.role can grant additional volunteer access; user-editable metadata is ignored.
+## Accounts and roles
+
+Everyone needs an account: **Create account** on the login screen, then sign in. There is no
+demo login, and without the Supabase settings nobody can sign in.
+
+**Visitors** sign in with their account.
+
+**Volunteers** cannot gain access by selecting the Volunteer tile or setting a browser header.
+A coordinator issues an access code; the backend stores only its SHA-256 hash in
+`volunteer_access_codes`, redeems it atomically in the database, and returns an eight-hour
+signed pass. Picking "Volunteer" at sign-up never grants volunteer rights. Codes can be:
+
+- **email-bound** (default): only that account can use it, once;
+- **open** (`--any-email`): any signed-in account can use it, up to `--uses` times in total.
+  Convenient for a team, but anyone holding the code can use it, so keep the expiry short.
+
+1. Run `hackathon_backend/supabase_schema.sql` in the Supabase SQL editor (safe to re-run).
+2. Set `VOLUNTEER_SESSION_SECRET` in `hackathon_backend/.env` to a random value, e.g.
+   `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
+3. Create a code from `hackathon_backend`:
+   - `.venv\Scripts\python issue_volunteer_code.py volunteer@example.org --expires-hours 72`
+   - `.venv\Scripts\python issue_volunteer_code.py --any-email --uses 5 --expires-hours 12`
+
+   Share the printed code privately.
+4. The volunteer selects **Volunteer**, signs in with their account and enters the code.
+
+Volunteer-only actions are enforced by the API: field reports, sensor updates, site closures,
+pickup completion, festival profile changes, simulation controls and the reroute demo.
