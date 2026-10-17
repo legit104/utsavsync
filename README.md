@@ -65,3 +65,21 @@ signed pass. Picking "Volunteer" at sign-up never grants volunteer rights. Codes
 
 Volunteer-only actions are enforced by the API: field reports, sensor updates, site closures,
 pickup completion, festival profile changes, simulation controls and the reroute demo.
+
+
+Then open http://localhost:5173 (API docs at http://localhost:8000/docs). On macOS/Linux, follow
+the backend README and use `npm run dev`. Run `npm install` once after pulling new frontend packages.
+
+### Live updates between team devices
+
+Run the backend and frontend on the team laptop, with both devices on the same trusted Wi-Fi:
+
+1. On the team laptop, run `hackathon_backend/start-lan.bat` and `npm run dev:lan` in separate terminals.
+2. Find the team laptop's IPv4 address with `ipconfig` (for example, `192.168.1.25`).
+3. In the repo-root `.env`, set `VITE_API_URL=http://192.168.1.25:8000`, then restart Vite.
+4. On both devices, open `http://192.168.1.25:5173` and sign in to the same festival engine.
+
+The visitor dashboard checks site status every 2 seconds, so a volunteer closing or reopening a site
+will appear automatically. The backend keeps live state in memory, so leave its terminal running;
+restarting it resets the festival state. Use this only on a trusted network, and keep Supabase auth
+configured for volunteer actions.

@@ -119,6 +119,37 @@ function VisitorDashboard({ onBackToLogin, userEmail, userRole = 'visitor', sess
     return () => { active = false }
   }, [festivalId, credentials])
 
+  // Keep site status shared across devices by polling the same engine every 2 seconds.
+  useEffect(() => {
+    let active = true
+    let inFlight = false
+    const pollStatus = async () => {
+      if (inFlight) return
+      inFlight = true
+      try {
+        const status = await api(`/festivals/${festivalId}/status`)
+        if (!active) return
+        setLocations(status.sites.map(site => ({
+          id: site.id, name: site.name,
+          area: site.facilities?.join(' · ') || 'Festival site',
+          lat: site.lat, lng: site.lng, closed: site.closed,
+          crowd: Math.round(site.occupancy * 100), capacity: site.capacity,
+          forecast: Math.round(site.projected_next_slot_occupancy * 100),
+          waste: Math.round((site.waste?.fill || 0) * 100),
+          wasteForecast: Math.round((site.waste?.forecast_fill || 0) * 100),
+          trend: site.trend_people_per_hour || 0, status: site.status,
+        })))
+        setSimTime(status.sim_time)
+        setConnected(true)
+      } catch {
+        // Keep the last known state during a brief network interruption.
+      } finally {
+        inFlight = false
+      }
+    }
+    const timer = window.setInterval(pollStatus, 2000)
+    return () => { active = false; window.clearInterval(timer) }
+  }, [festivalId])
   async function refreshOperations() {
     const [status, tasks, routes, entries, groups] = await Promise.all([
       api(`/festivals/${festivalId}/status`),
