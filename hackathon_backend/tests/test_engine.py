@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from app.engine import RED, FestivalEngine, to_hhmm
+from app.engine import RED, FestivalEngine, to_hhmm, to_min
 from app.profiles import FestivalProfile, load_profiles
 from app.simulation import run_reroute_demo, simulate_day
 from conftest import volunteer_headers
@@ -124,7 +124,7 @@ def test_api_round_trip():
     from app.main import app
 
     client = TestClient(app)
-    assert client.post("/festivals/ganesh_utsav/reset", headers=volunteer_headers()).status_code == 200
+    assert client.post("/festivals/ganesh_utsav/reset?from_opening=true", headers=volunteer_headers()).status_code == 200
     response = client.post("/festivals/ganesh_utsav/requests",
                            json={"group_size": 12, "preferred_site_id": LALBAUG})
     assert response.status_code == 200
@@ -139,7 +139,7 @@ def test_visitor_sees_own_booking_after_reroute():
     from app.main import app
 
     client = TestClient(app)
-    client.post("/festivals/ganesh_utsav/reset", headers=volunteer_headers())
+    client.post("/festivals/ganesh_utsav/reset?from_opening=true", headers=volunteer_headers())
     me = {"X-User-Id": "visitor-1"}
     booked = client.post("/festivals/ganesh_utsav/requests", headers=me, json={
         "group_size": 12, "preferred_site_id": LALBAUG, "preferred_time": "07:00"}).json()["decision"]
@@ -192,3 +192,29 @@ def test_supabase_login_and_roles(monkeypatch):
                        json={**report, "reporter_type": "volunteer", "kind": "crowd"}).json()
     assert sent["report"]["reporter_type"] == "citizen"
     assert client.get("/festivals/ganesh_utsav/status").status_code == 200  # dashboard stays public
+
+
+@pytest.mark.parametrize("festival_id", ["ganesh_utsav", "navratri_garba"])
+def test_live_festival_opens_busy_with_every_status(festival_id):
+    from collections import Counter
+    from app.simulation import warm_up
+
+    engine = warm_up(FestivalEngine(PROFILES[festival_id]))
+    statuses = Counter(site.status for site in engine.sites.values())
+    assert engine.clock == to_min(PROFILES[festival_id]["simulation"]["live_start"])
+    assert statuses["GREEN"] and statuses["AMBER"] and statuses["RED"]
+    assert any(t["status"] == "OPEN" for t in engine.swm_tasks.values())
+    assert not engine.groups  # background crowd only, no visitor bookings
+
+    again = warm_up(FestivalEngine(PROFILES[festival_id]))  # same every restart
+    assert [s.crowd for s in again.sites.values()] == [s.crowd for s in engine.sites.values()]
+
+
+def test_reset_returns_to_live_start_or_to_opening():
+    from app.main import app
+
+    client = TestClient(app)
+    busy = client.post("/festivals/ganesh_utsav/reset", headers=volunteer_headers()).json()
+    assert busy["sim_time"] == "19:00" and {s["status"] for s in busy["sites"]} >= {"GREEN", "AMBER", "RED"}
+    empty = client.post("/festivals/ganesh_utsav/reset?from_opening=true", headers=volunteer_headers()).json()
+    assert empty["sim_time"] == "06:00" and {s["status"] for s in empty["sites"]} == {"GREEN"}

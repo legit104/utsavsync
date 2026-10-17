@@ -22,7 +22,7 @@
     "forecast_minutes": 60,
     "route_cluster_km": 4.0
   },
-  "simulation": { "peak_time": "21:30", "peak_occupancy": 0.72, "spread_hours": 1.5 },
+  "simulation": { "live_start": "21:15", "peak_time": "21:30", "peak_occupancy": 0.72, "spread_hours": 1.5 },
   "sites": [
     {
       "id": "borivali_korakendra",

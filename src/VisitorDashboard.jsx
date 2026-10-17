@@ -201,7 +201,7 @@ function VisitorDashboard({ onBackToLogin, userEmail, userRole = 'visitor', sess
       if (!connected) throw new Error('Start the Festival Operations Engine before resetting the demo.')
       await api(`/festivals/${festivalId}/reset`, { method: 'POST', ...credentials })
       await refreshOperations()
-      setApiMessage('Festival day reset to opening time. You can run the live reroute demo now.')
+      setApiMessage('Festival day reset to its live start time, with realistic crowds. You can run the live reroute demo now.')
     } catch (error) { setApiMessage(error.message) }
   }
 

@@ -195,6 +195,11 @@ Copy a file in `profiles/`, change sites, timings, thresholds, bins, waste rates
 either drop it in `profiles/` (then `POST /festivals/reload`) or `POST` it to `/festivals`.
 Festival hours must fall within one calendar day.
 
+`simulation.live_start` (e.g. `"19:00"`) makes the live engine open already run up to that time:
+walk-in crowds and SWM teams are simulated from opening, so sites start with a realistic mix of
+GREEN / AMBER / RED and some pickups are open. It is the same on every restart. `POST /reset`
+returns to that state; `POST /reset?from_opening=true` starts empty at opening time instead.
+
 ## Volunteer access codes
 
 Run the volunteer_access_codes table section in supabase_schema.sql. Set SUPABASE_URL, SUPABASE_SERVICE_KEY, and VOLUNTEER_SESSION_SECRET in the backend .env. Generate a random signing secret locally and never expose it to the frontend.

@@ -218,6 +218,9 @@ class FestivalEngine:
         """Write every site's live crowd and bin levels (called after each API change)."""
         self._save("site_status", self._status_rows())
 
+    def save_tasks(self) -> None:
+        self._save("swm_tasks", [self._task_row(t) for t in self.swm_tasks.values()])
+
     def _log(self, type_: str, **fields) -> dict:
         entry = {
             "id": self._next_id("LOG"),

@@ -22,7 +22,7 @@ from .engine import FestivalEngine, NotFoundError, to_hhmm
 from .models import (AdvanceClock, CompleteTask, FieldReport, GroupRequest, Report, SensorUpdate, SimulateRequest,
                      SiteAction, VolunteerAccessCode, WhatIf)
 from .profiles import FestivalProfile, load_profiles, save_profile
-from .simulation import run_reroute_demo, simulate_day
+from .simulation import run_reroute_demo, simulate_day, warm_up
 from .storage import storage_from_env
 
 load_dotenv()
@@ -61,13 +61,27 @@ def all_profiles() -> dict[str, dict]:
     return found
 
 
+def live_engine(profile: dict, from_opening: bool = False) -> FestivalEngine:
+    """A fresh festival day, run up to the profile's live_start unless asked to start at opening.
+
+    The warm-up runs offline; only the resulting site status and pickups are saved,
+    not the hundreds of background readings that produced them.
+    """
+    engine = FestivalEngine(profile)
+    if not from_opening:
+        warm_up(engine)
+    engine.storage = storage
+    engine.save_site_status()
+    engine.save_tasks()
+    return engine
+
+
 def start_engine(profile: dict) -> FestivalEngine:
     profiles[profile["id"]] = profile
     locks.setdefault(profile["id"], threading.Lock())
-    engine = engines[profile["id"]] = FestivalEngine(profile, storage)
     if storage:
-        storage.sync_profile(profile)
-        engine.save_site_status()
+        storage.sync_profile(profile)  # sites must exist before their status rows
+    engine = engines[profile["id"]] = live_engine(profile)
     return engine
 
 
@@ -186,11 +200,11 @@ def get_profile(festival_id: str):
 
 
 @app.post("/festivals/{festival_id}/reset", tags=["profiles"], dependencies=[Depends(require_volunteer)])
-def reset_festival(festival_id: str):
-    """Start the festival day over (clock back to opening time, no groups or tasks)."""
+def reset_festival(festival_id: str, from_opening: bool = False):
+    """Start the festival day over at its live start time (busy, with realistic crowds),
+    or with ?from_opening=true at opening time with empty sites. No groups are kept."""
     with festival(festival_id) as engine:
-        fresh = engines[festival_id] = FestivalEngine(engine.profile, storage)
-        fresh.save_site_status()
+        fresh = engines[festival_id] = live_engine(engine.profile, from_opening)
         return fresh.snapshot()
 
 

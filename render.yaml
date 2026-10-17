@@ -1,0 +1,27 @@
+# Render blueprint for the UtsavSync backend (render.com → New → Blueprint → pick this repo).
+# Secrets are NOT stored here: Render asks for the "sync: false" values when you create it.
+services:
+  - type: web
+    name: utsavsync-backend
+    runtime: python
+    plan: free                    # free instances sleep after ~15 idle minutes; the first request then takes ~1 minute
+    rootDir: hackathon_backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true              # redeploy on every push to main
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: AUTH_MODE
+        value: supabase
+      - key: CORS_ORIGINS         # the GitHub Pages site, plus local development
+        value: https://legit104.github.io,http://localhost:5173
+      - key: VOLUNTEER_SESSION_SECRET
+        generateValue: true       # Render creates a random secret
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_KEY  # the secret key: only ever entered in Render's dashboard
+        sync: false

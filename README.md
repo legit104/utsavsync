@@ -28,6 +28,16 @@ npm.cmd run dev
 Then open http://localhost:5173 (API docs at http://localhost:8000/docs). On macOS/Linux, follow
 the backend README and use `npm run dev`. Run `npm install` once after pulling new frontend packages.
 
+## Online version
+
+- **Website:** GitHub Pages, built by `.github/workflows/pages.yml` on every push to `main`
+  (`https://legit104.github.io/utsavsync/`). Set repository variables `VITE_SUPABASE_URL`,
+  `VITE_SUPABASE_ANON_KEY` (publishable key) and `VITE_API_URL` (the backend address below)
+  under Settings → Secrets and variables → Actions → Variables.
+- **Backend:** Render, from `render.yaml` (render.com → New → Blueprint → this repo). Enter
+  `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_KEY` there when asked. The free
+  plan sleeps when idle, so open the site a minute before demoing.
+
 ## Settings
 
 | File | Contents |
