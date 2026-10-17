@@ -47,7 +47,7 @@ CORS is open to all origins in development, so Vite on 5173/5174 can call it dir
 - Volunteer-only access requires trusted Supabase app_metadata.role=volunteer or a one-use, email-bound coordinator code redeemed at POST /volunteers/verify-code.
 Volunteer access codes are issued by an administrator with issue_volunteer_code.py. The database stores a SHA-256 hash, binds each code to one email, and permits one redemption. POST /volunteers/verify-code accepts { "email": "...", "access_code": "..." } and returns an eight-hour signed bearer token. Configure VOLUNTEER_SESSION_SECRET and Supabase service credentials on the backend before issuing codes.
 
-Frontend calls use the shared helper in src/api.js. Supabase email/password is handled in src/auth.js when configured; without it, only visitor preview access is available.
+Frontend calls use the shared helper in src/api.js. Supabase email/password sign-in and sign-up are handled in src/auth.js; without the Supabase settings nobody can sign in. Volunteers additionally redeem a one-time access code at POST /volunteers/verify-code and then send the returned `vs1.` pass as their Bearer token.
 
 **Who can call what**
 

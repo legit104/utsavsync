@@ -8,6 +8,8 @@ from datetime import datetime, timedelta, timezone
 import httpx
 from dotenv import load_dotenv
 
+from app.storage import tls_verify
+
 load_dotenv()
 parser = argparse.ArgumentParser(description="Issue a one-time UtsavSync volunteer access code")
 parser.add_argument("email", help="Volunteer email address")
@@ -32,7 +34,7 @@ payload = {
     "expires_at": (datetime.now(timezone.utc) + timedelta(hours=args.expires_hours)).isoformat(),
 }
 response = httpx.post(url.rstrip("/") + "/rest/v1/volunteer_access_codes",
-                      headers=headers, json=payload, timeout=10)
+                      headers=headers, json=payload, timeout=10, verify=tls_verify())
 if response.status_code >= 400:
     raise SystemExit("Could not issue code in Supabase: " + response.text)
 print("Send this one-time code to " + email + ":")

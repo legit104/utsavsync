@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from app.engine import RED, FestivalEngine, to_hhmm
 from app.profiles import FestivalProfile, load_profiles
 from app.simulation import run_reroute_demo, simulate_day
+from conftest import volunteer_headers
 
 PROFILES = load_profiles()
 LALBAUG = "lalbaugcha_raja"
@@ -123,7 +124,7 @@ def test_api_round_trip():
     from app.main import app
 
     client = TestClient(app)
-    assert client.post("/festivals/ganesh_utsav/reset").status_code == 200
+    assert client.post("/festivals/ganesh_utsav/reset", headers=volunteer_headers()).status_code == 200
     response = client.post("/festivals/ganesh_utsav/requests",
                            json={"group_size": 12, "preferred_site_id": LALBAUG})
     assert response.status_code == 200
@@ -138,13 +139,13 @@ def test_visitor_sees_own_booking_after_reroute():
     from app.main import app
 
     client = TestClient(app)
-    client.post("/festivals/ganesh_utsav/reset")
+    client.post("/festivals/ganesh_utsav/reset", headers=volunteer_headers())
     me = {"X-User-Id": "visitor-1"}
     booked = client.post("/festivals/ganesh_utsav/requests", headers=me, json={
         "group_size": 12, "preferred_site_id": LALBAUG, "preferred_time": "07:00"}).json()["decision"]
     assert booked["decision"] == "ALLOCATED"
 
-    result = client.post("/festivals/ganesh_utsav/field-reports", json={
+    result = client.post("/festivals/ganesh_utsav/field-reports", headers=volunteer_headers(), json={
         "site_id": LALBAUG, "crowd_level": "CRITICAL", "waste_level_percent": 80,
         "entries": 100, "remarks": "Gate 2 jammed"}).json()
     assert result["site"]["status"] == RED

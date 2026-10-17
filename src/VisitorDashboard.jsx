@@ -14,7 +14,7 @@ const fallbackLocations = [
   { id: 'goregaon_ground', name: 'Goregaon Ground', area: 'Goregaon East', lat: 19.166, lng: 72.85, crowd: 66, capacity: 700, status: 'AMBER' },
 ]
 
-function VisitorDashboard({ onBackToLogin, userEmail, userRole = 'visitor', session, language = 'en', onLanguageChange = () => {}, previewMode = false }) {
+function VisitorDashboard({ onBackToLogin, userEmail, userRole = 'visitor', session, language = 'en', onLanguageChange = () => {} }) {
   const [page, setPage] = useState(userRole === 'volunteer' ? 'Operations' : 'Dashboard')
   const [festival, setFestival] = useState('Ganesh Utsav')
   const [locations, setLocations] = useState(fallbackLocations)
@@ -380,7 +380,6 @@ function VisitorDashboard({ onBackToLogin, userEmail, userRole = 'visitor', sess
           </div>
         </header>
 
-        {previewMode && <div className="volunteer-preview-notice" role="status">Temporary preview: this skips sign-in so you can explore the selected page without Supabase. Volunteer-only backend actions still require coordinator verification.</div>}
         <div className="demo-banner">
           {apiMessage || (connected ? `LIVE ENGINE · ${festival} · Simulated time ${simTime}` : 'DEMO MODE · Illustrative data only — not live BMC information')}
         </div>
@@ -492,7 +491,7 @@ function VisitorDashboard({ onBackToLogin, userEmail, userRole = 'visitor', sess
               <input type="time" value={arrival} onChange={e => setArrival(e.target.value)} required />
 
               <label>Decision message language</label>
-              <select value={language} onChange={e => setLanguage(e.target.value)}><option value="en">English</option><option value="hi">हिन्दी</option><option value="mr">मराठी</option></select>
+              <select value={language} onChange={e => onLanguageChange(e.target.value)}><option value="en">English</option><option value="hi">हिन्दी</option><option value="mr">मराठी</option></select>
 
               <button className="primary-button full-button" type="submit">
                 Check & Request Allocation →
