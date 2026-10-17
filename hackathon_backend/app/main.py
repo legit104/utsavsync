@@ -7,10 +7,12 @@ Docs: http://localhost:8000/docs
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 import threading
 from contextlib import contextmanager
+from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Query, Response
@@ -78,13 +80,57 @@ def live_engine(profile: dict, from_opening: bool = False) -> FestivalEngine:
     return engine
 
 
+# The live festival is saved to disk after every change, so restarting the backend
+# (including the automatic restart when backend code is edited) keeps the day's progress.
+STATE_DIR = Path(os.getenv("UTSAVSYNC_STATE_DIR") or Path(__file__).resolve().parent.parent / "state")
+
+
+def _profile_hash(profile: dict) -> str:
+    return hashlib.sha256(json.dumps(profile, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def save_state(engine: FestivalEngine) -> None:
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    path = STATE_DIR / f"{engine.id}.json"
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps({"profile_hash": _profile_hash(engine.profile), **engine.to_state()}), encoding="utf-8")
+    tmp.replace(path)  # never leaves a half-written file behind
+
+
+def load_state(profile: dict) -> FestivalEngine | None:
+    """The saved day for this festival, unless its profile changed since (or the file is unreadable)."""
+    path = STATE_DIR / f"{profile['id']}.json"
+    if not path.exists():
+        return None
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+        if state.get("profile_hash") != _profile_hash(profile):
+            log.info("Profile %s changed; starting a fresh day instead of the saved one", profile["id"])
+            return None
+        return FestivalEngine.from_state(profile, state, storage)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        log.warning("Could not restore saved state for %s, starting fresh: %s", profile["id"], exc)
+        return None
+
+
 def start_engine(profile: dict) -> FestivalEngine:
     profiles[profile["id"]] = profile
     locks.setdefault(profile["id"], threading.Lock())
     if storage:
         storage.sync_profile(profile)  # sites must exist before their status rows
-    engine = engines[profile["id"]] = live_engine(profile)
+    restored = load_state(profile)
+    if restored:
+        log.info("Restored %s at %s from saved state", profile["id"], to_hhmm(restored.clock))
+        restored.save_site_status()
+    engine = engines[profile["id"]] = restored or live_engine(profile)
+    save_state(engine)
     return engine
+
+
+def _fingerprint(engine: FestivalEngine) -> tuple:
+    """Cheap check for "did this request change anything?" (log, clock, crowds, bins, closures)."""
+    return (len(engine.log), engine.clock, len(engine.groups),
+            tuple((s.crowd, round(s.waste_kg, 1), s.closed) for s in engine.sites.values()))
 
 
 for _profile in all_profiles().values():
@@ -95,13 +141,14 @@ for _profile in all_profiles().values():
 def festival(festival_id: str):
     """Fetch a festival's engine, hold its lock, and turn engine errors into HTTP errors.
 
-    After a call that changed anything, the live site status is written to the database.
+    After a call that changed anything, the live site status is written to the database
+    and the whole day is saved to disk (see save_state).
     """
     if festival_id not in engines:
         raise HTTPException(404, f"Unknown festival '{festival_id}'. See GET /festivals.")
     with locks[festival_id]:
         engine = engines[festival_id]
-        before = (len(engine.log), engine.clock)
+        before = _fingerprint(engine)
         try:
             yield engine
         except NotFoundError as exc:
@@ -109,8 +156,11 @@ def festival(festival_id: str):
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
         current = engines[festival_id]
-        if current is engine and (len(engine.log), engine.clock) != before:
+        if current is not engine:
+            save_state(current)  # replaced by reset
+        elif _fingerprint(engine) != before:
             engine.save_site_status()
+            save_state(engine)
 
 
 def new_events(engine: FestivalEngine, since: int, exclude: dict | None = None) -> list[dict]:
@@ -392,4 +442,5 @@ def simulate(festival_id: str, body: SimulateRequest = SimulateRequest()):
             engine.storage = storage
             engine.persist_all()
             engines[festival_id] = engine
+            save_state(engine)
     return {"summary": summary, "status": engine.snapshot(), "decision_log": engine.log}

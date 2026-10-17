@@ -719,3 +719,43 @@ class FestivalEngine:
             "open_swm_tasks": sum(t["status"] == "OPEN" for t in self.swm_tasks.values()),
             "log_entries": len(self.log),
         }
+
+    # ------------------------------------------------------------ save/restore
+    # Plain data only (no pickled objects), so a saved day still loads after the
+    # code changes and the backend restarts.
+
+    STATE_VERSION = 1
+
+    def to_state(self) -> dict:
+        return {
+            "version": self.STATE_VERSION, "festival_id": self.id, "run_id": self.run_id,
+            "clock": self.clock, "seq": self._seq, "warned": [list(w) for w in self._warned],
+            "sites": {site.id: {"crowd": site.crowd, "waste_kg": site.waste_kg, "closed": site.closed,
+                                "status": site.status, "samples": [list(s) for s in site.samples]}
+                      for site in self.sites.values()},
+            "groups": [asdict(g) for g in self.groups.values()],
+            "swm_tasks": list(self.swm_tasks.values()),
+            "log": self.log,
+        }
+
+    @classmethod
+    def from_state(cls, profile: dict, state: dict, storage=None) -> "FestivalEngine":
+        """Rebuild a saved festival day. Sites no longer in the profile are skipped."""
+        if state.get("version") != cls.STATE_VERSION or state.get("festival_id") != profile["id"]:
+            raise ValueError("saved state does not match this festival or version")
+        engine = cls(profile, storage)
+        engine.run_id, engine.clock, engine._seq = state["run_id"], state["clock"], state["seq"]
+        engine._warned = {tuple(w) for w in state.get("warned", [])}
+        for site_id, saved in state["sites"].items():
+            site = engine.sites.get(site_id)
+            if site:
+                site.crowd, site.waste_kg = saved["crowd"], saved["waste_kg"]
+                site.closed, site.status = saved["closed"], saved["status"]
+                site.samples = [tuple(s) for s in saved.get("samples", [])]
+        fields = Group.__dataclass_fields__
+        for saved in state["groups"]:
+            if saved["site_id"] in engine.sites:
+                engine.groups[saved["id"]] = Group(**{k: v for k, v in saved.items() if k in fields})
+        engine.swm_tasks = {t["id"]: t for t in state["swm_tasks"] if t["site_id"] in engine.sites}
+        engine.log = list(state["log"])
+        return engine

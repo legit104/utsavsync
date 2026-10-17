@@ -10,6 +10,10 @@ for name in ("SUPABASE_URL", "SUPABASE_SERVICE_KEY", "SUPABASE_ANON_KEY"):
     os.environ[name] = ""
 os.environ["AUTH_MODE"] = "off"
 os.environ["VOLUNTEER_SESSION_SECRET"] = "test-only-volunteer-session-secret"
+# Saved festival days go to a throwaway folder, never the real hackathon_backend/state/.
+import tempfile  # noqa: E402
+
+os.environ["UTSAVSYNC_STATE_DIR"] = tempfile.mkdtemp(prefix="utsavsync-test-state-")
 
 
 def volunteer_headers(email: str = "volunteer@utsavsync.test") -> dict:

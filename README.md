@@ -94,5 +94,8 @@ about 2 seconds. Two ways to share one backend:
   needed: when the site is opened through that address it finds the backend there by itself.
   Windows may ask to allow Python and Node through the firewall: allow **Private networks** only.
 
-The backend keeps the live festival in memory, so keep its terminal running; restarting it
-resets the day to the profile's live start. Use Wi-Fi sharing only on a trusted network.
+The live festival is saved to `hackathon_backend/state/` after every change, so restarting the
+backend (including the automatic restart when backend code is edited) keeps the day's progress;
+frontend edits update every open screen straight away. To start the day over, use **Reset
+festival day** (or delete the `state` folder). If a festival's profile file changes, that
+festival starts a fresh day. Use Wi-Fi sharing only on a trusted network.
