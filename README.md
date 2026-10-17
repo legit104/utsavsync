@@ -13,9 +13,32 @@ profiles, not code. The whole interface is available in English, Hindi and Marat
 | Backend | [`hackathon_backend/`](hackathon_backend/) — see its [README](hackathon_backend/README.md) and [API contract](hackathon_backend/API_CONTRACT.md) | Python + FastAPI |
 | Database & login | Supabase (PostgreSQL + Auth) | |
 
-## Run it
+## 1. First-time setup (once per laptop)
 
-Two terminals, both left open:
+You need **Git**, **Python 3.11+** (tick "Add python.exe to PATH") and **Node.js**.
+
+```bash
+git clone https://github.com/legit104/utsavsync.git
+cd utsavsync
+npm.cmd install
+```
+
+Then create the two settings files (both are git-ignored; get the values from a teammate privately):
+
+| File | Copy from | Contents |
+|---|---|---|
+| `.env` (repo root) | `frontend.env.example` | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` (the **publishable** key only), `VITE_API_URL=http://localhost:8000` |
+| `hackathon_backend/.env` | `hackathon_backend/.env.example` | `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` (**secret** — never share or commit), `SUPABASE_ANON_KEY`, `AUTH_MODE=supabase`, `VOLUNTEER_SESSION_SECRET` (any long random text) |
+
+The backend sets up its own Python environment the first time it starts (about a minute).
+
+> **Windows PowerShell:** type `npm.cmd`, not `npm` — PowerShell blocks `npm`'s script wrapper.
+
+## 2. Run it
+
+Use **two terminals**, run one command in each, and leave both open while you use the site.
+
+### On this laptop only
 
 ```bash
 hackathon_backend\start.bat
@@ -25,77 +48,109 @@ hackathon_backend\start.bat
 npm.cmd run dev
 ```
 
-Then open http://localhost:5173 (API docs at http://localhost:8000/docs). On macOS/Linux, follow
-the backend README and use `npm run dev`. Run `npm install` once after pulling new frontend packages.
+Open **http://localhost:5173**. API docs: http://localhost:8000/docs.
 
-## Online version
+### Shared with other laptops on the same Wi-Fi
 
-- **Website:** GitHub Pages, built by `.github/workflows/pages.yml` on every push to `main`
-  (`https://legit104.github.io/utsavsync/`). Set repository variables `VITE_SUPABASE_URL`,
-  `VITE_SUPABASE_ANON_KEY` (publishable key) and `VITE_API_URL` (the backend address below)
-  under Settings → Secrets and variables → Actions → Variables.
-- **Backend:** Render, from `render.yaml` (render.com → New → Blueprint → this repo). Enter
-  `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_KEY` there when asked. The free
-  plan sleeps when idle, so open the site a minute before demoing.
+Run these on **one** laptop (the "team laptop") instead:
 
-## Settings
+```bash
+hackathon_backend\start-lan.bat
+```
 
-| File | Contents |
+```bash
+npm.cmd run dev:lan
+```
+
+The backend window prints the team laptop's address (e.g. `192.168.1.25`). Everyone — including
+the team laptop — opens **`http://THAT-ADDRESS:5173`**. Other laptops need nothing installed and
+no `.env` changes; the site finds the backend on the team laptop by itself.
+
+- If Windows asks whether Python or Node may use the network, allow **Private networks** only.
+- College and public Wi-Fi often block laptops from reaching each other; a **phone hotspot**
+  usually works. Use Wi-Fi sharing only on a trusted network.
+- The address can change when you join a different Wi-Fi — check the backend window each time.
+
+**Everyone sees the same live view.** Every open screen refreshes every 2 seconds (paused while
+the tab is hidden): site colours, the map, pickups, routes, the decision log and My Groups. A
+change made on one laptop shows up on the others within about 2 seconds.
+
+## 3. Accounts and volunteer codes
+
+Everyone needs an account: click **Create account** on the login screen, then sign in.
+
+- **Email confirmation is off**, so new accounts can sign in immediately. If you turn it on
+  (Supabase → Authentication → Sign In / Providers → User Signups → Confirm email), set up
+  custom SMTP first: Supabase's built-in email only reaches members of your Supabase team and
+  sends about 2 emails an hour. Accounts created while confirmation was on stay unconfirmed;
+  confirm them under Authentication → Users, or delete them so the person can sign up again.
+- **Visitors** just sign in.
+- **Volunteers** also need an **access code**. Picking "Volunteer" at sign-up is not enough.
+
+**Creating a volunteer code** (in a terminal that isn't running a server):
+
+```bash
+cd hackathon_backend
+```
+
+One code for the whole team — any account, up to 5 uses, valid 12 hours:
+
+```bash
+.venv\Scripts\python issue_volunteer_code.py --any-email --uses 5 --expires-hours 12
+```
+
+Or a code for one person — that email only, one use:
+
+```bash
+.venv\Scripts\python issue_volunteer_code.py their-email@example.com
+```
+
+Copy the printed code (it is shown only once) and share it privately. The volunteer chooses
+**Volunteer**, signs in, pastes the code and clicks **Verify code & continue**. The volunteer
+pass lasts 8 hours; after that they need a new code. The database stores only a hash of each
+code, and volunteer-only actions (field reports, site closures, pickups, festival profiles,
+simulation and demo controls) are enforced by the API.
+
+## 4. The live festival day
+
+- The festival opens **mid-day with realistic crowds** (Ganesh Utsav at 19:00, Navratri at
+  21:15), so sites already show a mix of GREEN, AMBER and RED and some pickups are open. The
+  time is set by `simulation.live_start` in each profile.
+- **Progress is saved** to `hackathon_backend/state/` after every change. Restarting the
+  backend — including the automatic restart when backend code is edited — carries on where
+  it left off. Frontend edits update every open screen straight away.
+- **Start over** with **Reset festival day** on the volunteer Operations screen (or stop the
+  backend and delete `hackathon_backend/state/`). Editing a festival's profile file also starts
+  that festival on a fresh day.
+
+## 5. Online version (optional)
+
+So people can use it from anywhere, without the team laptop:
+
+- **Backend on Render:** render.com → New → **Blueprint** → this repo (it reads `render.yaml`).
+  Enter `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_KEY` when asked. The free
+  plan sleeps when idle — open the site a minute before demoing.
+- **Website on GitHub Pages:** Settings → Pages → Source: **GitHub Actions** (private repos need
+  GitHub Pro or the Student Developer Pack). Add repository variables `VITE_SUPABASE_URL`,
+  `VITE_SUPABASE_ANON_KEY` (publishable key) and `VITE_API_URL` (the Render address) under
+  Settings → Secrets and variables → Actions → Variables, then run the "Deploy UtsavSync to
+  GitHub Pages" workflow. The site is at `https://legit104.github.io/utsavsync/`.
+- In Supabase → Authentication → URL Configuration, add the site's address to Redirect URLs.
+
+## Database
+
+Run `hackathon_backend/supabase_schema.sql` once in the Supabase SQL editor (safe to re-run after
+pulling changes to it). See the [backend README](hackathon_backend/README.md) for the tables.
+
+## Troubleshooting
+
+| Problem | Fix |
 |---|---|
-| `.env` (repo root, copy `frontend.env.example`) | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` (the **publishable** key only), `VITE_API_URL` |
-| `hackathon_backend/.env` (copy `.env.example`) | `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` (secret), `SUPABASE_ANON_KEY`, `AUTH_MODE=supabase`, `VOLUNTEER_SESSION_SECRET` |
-
-Both `.env` files are git-ignored. Never commit them or share the secret key.
-
-## Accounts and roles
-
-Everyone needs an account: **Create account** on the login screen, then sign in. There is no
-demo login, and without the Supabase settings nobody can sign in.
-
-**Visitors** sign in with their account.
-
-**Volunteers** cannot gain access by selecting the Volunteer tile or setting a browser header.
-A coordinator issues an access code; the backend stores only its SHA-256 hash in
-`volunteer_access_codes`, redeems it atomically in the database, and returns an eight-hour
-signed pass. Picking "Volunteer" at sign-up never grants volunteer rights. Codes can be:
-
-- **email-bound** (default): only that account can use it, once;
-- **open** (`--any-email`): any signed-in account can use it, up to `--uses` times in total.
-  Convenient for a team, but anyone holding the code can use it, so keep the expiry short.
-
-1. Run `hackathon_backend/supabase_schema.sql` in the Supabase SQL editor (safe to re-run).
-2. Set `VOLUNTEER_SESSION_SECRET` in `hackathon_backend/.env` to a random value, e.g.
-   `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
-3. Create a code from `hackathon_backend`:
-   - `.venv\Scripts\python issue_volunteer_code.py volunteer@example.org --expires-hours 72`
-   - `.venv\Scripts\python issue_volunteer_code.py --any-email --uses 5 --expires-hours 12`
-
-   Share the printed code privately.
-4. The volunteer selects **Volunteer**, signs in with their account and enters the code.
-
-Volunteer-only actions are enforced by the API: field reports, sensor updates, site closures,
-pickup completion, festival profile changes, simulation controls and the reroute demo.
-
-
-Then open http://localhost:5173 (API docs at http://localhost:8000/docs). On macOS/Linux, follow
-the backend README and use `npm run dev`. Run `npm install` once after pulling new frontend packages.
-
-### Same live view on several laptops
-
-Every open screen refreshes from the backend every 2 seconds (paused while the tab is hidden):
-site colours, the map, pickups, routes, the decision log and My Groups. So any laptop using the
-**same backend** sees the same festival, and a change made on one appears on the others within
-about 2 seconds. Two ways to share one backend:
-
-- **Online:** use the GitHub Pages site with the Render backend (see "Online version").
-- **Same Wi-Fi, no accounts needed:** on the team laptop run `hackathon_backend\start-lan.bat`
-  and `npm.cmd run dev:lan` in separate terminals. The backend window prints the laptop's IPv4
-  address (e.g. `192.168.1.25`); everyone opens `http://THAT-ADDRESS:5173`. No `.env` change is
-  needed: when the site is opened through that address it finds the backend there by itself.
-  Windows may ask to allow Python and Node through the firewall: allow **Private networks** only.
-
-The live festival is saved to `hackathon_backend/state/` after every change, so restarting the
-backend (including the automatic restart when backend code is edited) keeps the day's progress;
-frontend edits update every open screen straight away. To start the day over, use **Reset
-festival day** (or delete the `state` folder). If a festival's profile file changes, that
-festival starts a fresh day. Use Wi-Fi sharing only on a trusted network.
+| `npm` "cannot be loaded because running scripts is disabled" | Use `npm.cmd` |
+| Page says "DEMO MODE" / "Backend is offline" | The backend terminal isn't running — start it |
+| "Unable to connect" in the browser | One of the two terminals was closed — start both again |
+| Other laptop can't open the site | Use `start-lan.bat` + `npm.cmd run dev:lan`, the address from the backend window, and the same Wi-Fi; allow the firewall prompt |
+| "Wrong email or password" | Create an account first, or check the password |
+| "Please confirm your email first" | See *Accounts* above — confirm the user in Supabase |
+| Volunteer code rejected | Codes are one-use (or `--uses` times), expire, and email-bound codes only work for that email — create a new one |
+| `start.bat` fails on Python 3.15+ | Install Python 3.13 alongside, delete `hackathon_backend\.venv`, run `start.bat` again |
