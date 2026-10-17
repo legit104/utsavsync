@@ -17,6 +17,7 @@ from .profiles import load_profiles
 
 SENSOR_EVERY_MINUTES = 10
 SWM_RESPONSE_MINUTES = 45
+WARM_UP_SEED = 7
 DEMO_GROUP_SIZES = (10, 15, 20)
 
 
@@ -89,6 +90,35 @@ def run_reroute_demo(engine: FestivalEngine, site_id: str | None = None) -> dict
     }
 
 
+def run_background_until(engine: FestivalEngine, minute: int, rng: random.Random, next_sensor: int) -> int:
+    """Advance the clock to `minute` while gate counters report every few minutes and
+    SWM teams clear due pickups. Returns when the next sensor reading is due."""
+    while engine.clock < minute:
+        step_to = min(minute, next_sensor)
+        if step_to > engine.clock:
+            engine.advance(step_to - engine.clock)
+        if engine.clock >= next_sensor:
+            feed_sensors(engine, rng)
+            complete_due_tasks(engine)
+            next_sensor += SENSOR_EVERY_MINUTES
+    return next_sensor
+
+
+def warm_up(engine: FestivalEngine, seed: int = WARM_UP_SEED) -> FestivalEngine:
+    """Open the live festival mid-day instead of empty at opening time.
+
+    Runs walk-in crowds and SWM teams from opening up to the profile's
+    simulation.live_start, so sites start with realistic GREEN/AMBER/RED crowds,
+    partly full bins and open pickups. The fixed seed makes every restart identical,
+    which keeps demos rehearsable. No visitor groups are created.
+    """
+    start = (engine.profile.get("simulation") or {}).get("live_start")
+    if start:
+        target = min(to_min(start), engine.day_end - engine.slot)
+        run_background_until(engine, target, random.Random(seed), engine.day_start)
+    return engine
+
+
 def simulate_day(profile: dict, events: int = 75, seed: int = 42) -> tuple[FestivalEngine, dict]:
     """Play a festival day of `events` requests and reports, including one scripted surge."""
     rng = random.Random(seed)
@@ -101,19 +131,8 @@ def simulate_day(profile: dict, events: int = 75, seed: int = 42) -> tuple[Festi
     next_sensor = engine.day_start
     inputs = Counter()
 
-    def run_until(minute: int) -> None:
-        nonlocal next_sensor
-        while engine.clock < minute:
-            step_to = min(minute, next_sensor)
-            if step_to > engine.clock:
-                engine.advance(step_to - engine.clock)
-            if engine.clock >= next_sensor:
-                feed_sensors(engine, rng)
-                complete_due_tasks(engine)
-                next_sensor += SENSOR_EVERY_MINUTES
-
     for i, minute in enumerate(times):
-        run_until(minute)
+        next_sensor = run_background_until(engine, minute, rng, next_sensor)
         if i == surge_at:
             try:
                 run_reroute_demo(engine)

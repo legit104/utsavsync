@@ -22,7 +22,7 @@
     "forecast_minutes": 60,
     "route_cluster_km": 2.0
   },
-  "simulation": { "peak_time": "20:00", "peak_occupancy": 0.7, "spread_hours": 3.5 },
+  "simulation": { "live_start": "19:00", "peak_time": "20:00", "peak_occupancy": 0.7, "spread_hours": 3.5 },
   "sites": [
     {
       "id": "lalbaugcha_raja",

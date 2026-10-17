@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { CircleMarker, MapContainer, Popup, TileLayer, Tooltip, useMap } from 'react-leaflet'
+import { CircleMarker, MapContainer, Pane, Popup, TileLayer, Tooltip, useMap } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import './SiteMap.css'
 
@@ -36,6 +36,10 @@ function FocusSite({ site, markers }) {
   return null
 }
 
+/* Each status draws in its own map layer, stacked by severity, so a nearby GREEN or
+   AMBER site can never hide a RED or CLOSED one (Leaflet panes, above the map tiles). */
+const STATUS_PANES = [['GREEN', 410], ['AMBER', 420], ['RED', 430], ['CLOSED', 440]]
+
 function SiteMap({ sites, selectedId, onSelect, renderActions }) {
   const markers = useRef({})
   const located = sites.filter(site => Number.isFinite(site.lat) && Number.isFinite(site.lng))
@@ -50,34 +54,38 @@ function SiteMap({ sites, selectedId, onSelect, renderActions }) {
         />
         <FitToSites sites={located} />
         <FocusSite site={selected} markers={markers} />
-        {located.map(site => {
-          const status = statusOf(site)
-          const isSelected = site.id === selectedId
-          return (
-            <CircleMarker
-              key={site.id}
-              ref={marker => { markers.current[site.id] = marker }}
-              center={[site.lat, site.lng]}
-              radius={isSelected ? 15 : 11}
-              pathOptions={{ color: '#ffffff', weight: 3, fillColor: STATUS_COLORS[status] || STATUS_COLORS.GREEN, fillOpacity: 0.95 }}
-              eventHandlers={{ click: () => onSelect?.(site.id) }}
-            >
-              <Tooltip direction="top" offset={[0, -12]}>{site.name} · {site.crowd}%</Tooltip>
-              <Popup>
-                <div className="site-popup">
-                  <strong>{site.name}</strong>
-                  <span className={`status-pill ${status.toLowerCase()}`}>{status}</span>
-                  <dl>
-                    <dt>Crowd now</dt><dd>{site.crowd}% of {site.capacity}</dd>
-                    {site.forecast !== undefined && <><dt>Next slot</dt><dd>{site.forecast}%</dd></>}
-                    {site.waste !== undefined && <><dt>Bins</dt><dd>{site.waste}% · forecast {site.wasteForecast ?? site.waste}%</dd></>}
-                  </dl>
-                  {renderActions?.(site)}
-                </div>
-              </Popup>
-            </CircleMarker>
-          )
-        })}
+        {STATUS_PANES.map(([paneStatus, zIndex]) => (
+          <Pane key={paneStatus} name={'sites-' + paneStatus.toLowerCase()} style={{ zIndex }}>
+            {located.filter(site => statusOf(site) === paneStatus).map(site => {
+              const status = statusOf(site)
+              const isSelected = site.id === selectedId
+              return (
+                <CircleMarker
+                  key={site.id + ':' + status}
+                  ref={marker => { markers.current[site.id] = marker }}
+                  center={[site.lat, site.lng]}
+                  radius={isSelected ? 15 : 11}
+                  pathOptions={{ color: '#ffffff', weight: 3, fillColor: STATUS_COLORS[status] || STATUS_COLORS.GREEN, fillOpacity: 0.95 }}
+                  eventHandlers={{ click: () => onSelect?.(site.id) }}
+                >
+                  <Tooltip direction="top" offset={[0, -12]}>{site.name} · {site.crowd}%</Tooltip>
+                  <Popup>
+                    <div className="site-popup">
+                      <strong>{site.name}</strong>
+                      <span className={`status-pill ${status.toLowerCase()}`}>{status}</span>
+                      <dl>
+                        <dt>Crowd now</dt><dd>{site.crowd}% of {site.capacity}</dd>
+                        {site.forecast !== undefined && <><dt>Next slot</dt><dd>{site.forecast}%</dd></>}
+                        {site.waste !== undefined && <><dt>Bins</dt><dd>{site.waste}% · forecast {site.wasteForecast ?? site.waste}%</dd></>}
+                      </dl>
+                      {renderActions?.(site)}
+                    </div>
+                  </Popup>
+                </CircleMarker>
+              )
+            })}
+          </Pane>
+        ))}
       </MapContainer>
       <div className="site-map-legend" aria-hidden="true">
         <span><i style={{ background: STATUS_COLORS.GREEN }} />Green</span>

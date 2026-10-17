@@ -78,6 +78,8 @@ class Waste(BaseModel):
 
 
 class Simulation(BaseModel):
+    live_start: str | None = Field(None, pattern=HHMM,
+                                   description="The live engine opens already run up to this time (default: festival start)")
     peak_time: str | None = Field(None, pattern=HHMM)
     peak_occupancy: float = Field(0.7, gt=0)
     spread_hours: float = Field(3.0, gt=0)
