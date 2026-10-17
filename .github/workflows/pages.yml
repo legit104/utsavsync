@@ -29,6 +29,12 @@ jobs:
         run: npm ci
       - name: Build frontend
         run: npm run build
+        env:
+          # Set these under Settings → Secrets and variables → Actions → Variables.
+          # Only public values belong here: the Supabase *publishable* key, never the secret key.
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
