@@ -27,6 +27,7 @@ LEVEL_FRACTION = {"LOW": 0.3, "MEDIUM": 0.65, "HIGH": 0.9, "CRITICAL": 1.1}
 PRIORITY_RANK = {"URGENT": 0, "HIGH": 1, "NORMAL": 2}
 TICK_MINUTES = 5
 TREND_WINDOW_MINUTES = 30
+MEASURED_WASTE_WEIGHT = 1.0
 
 
 class NotFoundError(KeyError):
@@ -512,26 +513,55 @@ class FestivalEngine:
     def _save_task(self, task: dict) -> None:
         self._save("swm_tasks", self._task_row(task))
 
-    def _check_waste(self, site: Site) -> None:
+    def _waste_reading(self, site: Site) -> dict:
+        """Current numbers for a site's pickup task: fill now and forecast, priority, load."""
         trigger = self.waste["pickup_trigger_fill"]
+        horizon = self.waste["forecast_minutes"]
         fill_now = site.waste_kg / site.bin_capacity_kg
         forecast_kg, fill_next = self.waste_forecast(site)
-        if max(fill_now, fill_next) < trigger or self._open_task(site.id):
-            return
-        priority = "URGENT" if fill_now >= 0.9 else "HIGH" if fill_next >= 1.0 else "NORMAL"
-        horizon = self.waste["forecast_minutes"]
-        breakdown = {kind: round(forecast_kg * rate / self.rate_per_person_hour, 1)
-                     for kind, rate in self.waste["per_person_per_hour_kg"].items()}
-        task = {
-            "id": self._next_id("SWM"), "festival_id": self.id, "site_id": site.id, "site_name": site.name,
-            "lat": site.config["lat"], "lng": site.config["lng"], "status": "OPEN", "priority": priority,
-            "created_at": to_hhmm(self.clock), "created_minute": self.clock,
+        return {
+            "priority": "URGENT" if fill_now >= 0.9 else "HIGH" if fill_next >= 1.0 else "NORMAL",
             "current_fill": round(fill_now, 3), "forecast_fill": round(fill_next, 3),
             "forecast_window_minutes": horizon, "expected_load_kg": round(forecast_kg, 1),
-            "waste_breakdown_kg": breakdown,
+            "waste_breakdown_kg": {kind: round(forecast_kg * rate / self.rate_per_person_hour, 1)
+                                   for kind, rate in self.waste["per_person_per_hour_kg"].items()},
             "reason": f"Bins at {pct(fill_now)} now, forecast {pct(fill_next)} within {horizon} min "
                       f"(pickup trigger {pct(trigger)}).",
         }
+
+    def _update_task(self, task: dict, site: Site) -> None:
+        """Keep an open pickup task current as bins fill; escalate its priority if needed."""
+        reading = self._waste_reading(site)
+        escalated = PRIORITY_RANK[reading["priority"]] < PRIORITY_RANK[task["priority"]]
+        if not escalated:
+            reading["priority"] = task["priority"]  # never downgrade an open task
+        big_change = abs(reading["current_fill"] - task["current_fill"]) >= 0.05
+        task.update(reading)
+        if escalated or big_change:
+            self._save_task(task)
+        if escalated:
+            self._log("SWM_TASK_UPDATED", task_id=task["id"], site_id=site.id, site_name=site.name,
+                      priority=task["priority"], reason="Priority raised: " + task["reason"],
+                      actions=[{"audience": "SWM_TEAM", "action": "PICKUP", "site_id": site.id, "task_id": task["id"],
+                                "priority": task["priority"], "expected_load_kg": task["expected_load_kg"],
+                                "waste_breakdown_kg": task["waste_breakdown_kg"]}],
+                      notifications=notify("SWM_TASK", site=site.name, fill=round(task["forecast_fill"] * 100)))
+
+    def _check_waste(self, site: Site) -> None:
+        task = self._open_task(site.id)
+        if task:
+            self._update_task(task, site)
+            return
+        reading = self._waste_reading(site)
+        if max(reading["current_fill"], reading["forecast_fill"]) < self.waste["pickup_trigger_fill"]:
+            return
+        priority, breakdown = reading["priority"], reading["waste_breakdown_kg"]
+        task = {
+            "id": self._next_id("SWM"), "festival_id": self.id, "site_id": site.id, "site_name": site.name,
+            "lat": site.config["lat"], "lng": site.config["lng"], "status": "OPEN",
+            "created_at": to_hhmm(self.clock), "created_minute": self.clock, **reading,
+        }
+        fill_next = reading["forecast_fill"]
         self.swm_tasks[task["id"]] = task
         self._save_task(task)
         self._log("SWM_TASK", task_id=task["id"], site_id=site.id, site_name=site.name, priority=priority,
@@ -591,6 +621,8 @@ class FestivalEngine:
         site = self.site(report["site_id"])
         reporter = report["reporter_type"]
         weight = self.rules[f"{reporter}_report_weight"]
+        if reporter == "volunteer" and report["kind"] == "waste":
+            weight = MEASURED_WASTE_WEIGHT  # a volunteer's bin reading is a measurement, not a guess
         if report["kind"] == "crowd":
             if report.get("crowd_count") is not None:
                 target = report["crowd_count"]

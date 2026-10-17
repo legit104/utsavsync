@@ -218,3 +218,26 @@ def test_reset_returns_to_live_start_or_to_opening():
     assert busy["sim_time"] == "19:00" and {s["status"] for s in busy["sites"]} >= {"GREEN", "AMBER", "RED"}
     empty = client.post("/festivals/ganesh_utsav/reset?from_opening=true", headers=volunteer_headers()).json()
     assert empty["sim_time"] == "06:00" and {s["status"] for s in empty["sites"]} == {"GREEN"}
+
+
+def test_new_bin_reading_updates_and_escalates_an_open_pickup():
+    engine = ganesh()
+    engine.report({"site_id": LALBAUG, "reporter_type": "volunteer", "kind": "waste", "bin_fill_percent": 80})
+    task = engine._open_task(LALBAUG)
+    assert task and task["priority"] != "URGENT" and task["current_fill"] == 0.8  # measured, not blended
+
+    engine.report({"site_id": LALBAUG, "reporter_type": "volunteer", "kind": "waste", "bin_fill_percent": 96})
+    same = engine._open_task(LALBAUG)
+    assert same["id"] == task["id"]  # still one task per site
+    assert same["priority"] == "URGENT" and same["current_fill"] == 0.96
+    assert engine.log[-1]["type"] == "SWM_TASK_UPDATED"
+
+    engine.report({"site_id": LALBAUG, "reporter_type": "volunteer", "kind": "waste", "bin_fill_percent": 70})
+    assert engine._open_task(LALBAUG)["priority"] == "URGENT"  # an open task is never downgraded
+
+
+def test_citizen_bin_report_is_still_blended():
+    engine = ganesh()
+    engine.report({"site_id": LALBAUG, "reporter_type": "citizen", "kind": "waste", "bin_fill_percent": 100})
+    site = engine.sites[LALBAUG]
+    assert 0.3 < site.waste_kg / site.bin_capacity_kg < 0.5  # weight 0.4: one citizen can't max out the bins

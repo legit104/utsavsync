@@ -231,13 +231,19 @@ function VisitorDashboard({ onBackToLogin, userEmail, userRole = 'visitor', sess
     try {
       if (!connected) throw new Error('Start the operations engine before sending a waste reading.')
       setApiMessage('')
-      await api(`/festivals/${festivalId}/field-reports`, {
+      const result = await api(`/festivals/${festivalId}/field-reports`, {
         method: 'POST', ...credentials,
         body: { site_id: site.id, crowd_level: null, waste_level_percent: fill,
           entries: 0, exits: 0, remarks: 'Volunteer bin reading; evaluate for SWM pickup.' },
       })
       await refreshOperations()
-      setApiMessage(`Waste reading sent for ${site.name}. The engine creates an SWM pickup task when the configured current or forecast threshold is reached.`)
+      const created = result.events?.find(entry => entry.type === 'SWM_TASK')
+      const raised = result.events?.find(entry => entry.type === 'SWM_TASK_UPDATED')
+      const openTask = result.site?.waste?.open_task_id
+      setApiMessage(created ? `New ${created.priority} pickup task for ${site.name}: ${created.reason}`
+        : raised ? `${site.name} pickup raised to ${raised.priority}: ${raised.reason}`
+        : openTask ? `${site.name} pickup task ${openTask} updated with the new reading (${fill}%).`
+        : `Reading saved for ${site.name} (${fill}%). Below the pickup trigger, so no task yet.`)
     } catch (error) { setApiMessage(error.message) }
   }
   async function completeTask(taskId) {
