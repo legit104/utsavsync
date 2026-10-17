@@ -174,7 +174,7 @@ def test_supabase_login_and_roles(monkeypatch):
         def json(self):
             return self._data
 
-    monkeypatch.setattr(auth.httpx, "get", lambda url, headers, timeout: FakeResponse(headers["Authorization"][7:]))
+    monkeypatch.setattr(auth.httpx, "get", lambda url, headers, **kw: FakeResponse(headers["Authorization"][7:]))
     auth._cache.clear()
     client = TestClient(app)
     report = {"site_id": LALBAUG, "crowd_level": "HIGH"}

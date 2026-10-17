@@ -27,19 +27,33 @@ uvicorn app.main:app --reload
 Open **http://localhost:8000/docs** for interactive API docs (every endpoint can be tried there).
 
 ```bash
-pytest                                  # 16 tests: rules, reroute, SWM, simulation, API, login
+pytest                                  # 31 tests: rules, reroute, SWM, simulation, API, login, database, frontend contract
 python -m app.simulation --events 80    # simulate a full day for both festivals -> output/
 ```
 
 ### Supabase (optional)
 
-The engine keeps live state in memory, so it works with no database. To also store every
-decision and SWM task for officials:
+The engine keeps live state in memory, so it works with no database. To also store
+everything in Supabase:
 
-1. Run `supabase_schema.sql` in the Supabase SQL editor.
-2. Copy `.env.example` to `.env` and set `SUPABASE_URL` and `SUPABASE_SERVICE_KEY`.
+1. Run `supabase_schema.sql` in the Supabase SQL editor (safe to re-run).
+2. Fill in `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` and `SUPABASE_ANON_KEY` in `.env`
+   (copy `.env.example` if it doesn't exist), then restart the backend.
 
-The service key stays on the backend only, never in the React app.
+| Table | What's in it | Written when |
+|---|---|---|
+| `festivals`, `sites` | Festival profiles and each site's capacity, bins, hours, location | On startup (from `profiles/*.json`) |
+| `site_status` | Live crowd, GREEN/AMBER/RED and bin levels per site | After every change |
+| `groups` | Every visitor booking and its current site/time (updated on reroute) | On booking, reroute, arrival, departure |
+| `decision_log` | Every decision with reason and JSON actions | As it happens |
+| `swm_tasks` | Pickup tasks for SWM teams | Created / completed |
+| `notifications` | Messages in English, Hindi, Marathi, linked to the visitor | With each allocation, reroute, pickup |
+| `profiles` | Each user's name and role (visitor/volunteer) | Automatically on sign-up |
+
+Writes happen in a background thread, so a slow connection never slows the API, and a
+failed write is logged without breaking anything. The React app can read `site_status`,
+`sites`, `festivals` and `swm_tasks` directly (public), and each user's own `groups`,
+`notifications` and `profile` (row level security). The secret key stays on the backend only.
 
 ### Login and roles (optional)
 
